@@ -34,7 +34,7 @@ use Cwd qw(abs_path);
 use Getopt::Long();
 
 # Application version (The project maintainer will bump this, don't modify it.)
-our $VERSION = '4.99.202';
+our $VERSION = '4.99.203';
 
 # Global variables that alter application runtime
 our $OPT_SKIP_NETWORKING;    # Disable network calls
@@ -110,6 +110,7 @@ sub init {
           get_new_backup_conf_href
           get_old_backup_conf_href
           get_openssl_rpm_changelog_sref
+          get_dovecot_rpm_changelog_sref
           get_phpini_aref
           get_process_pid_href
           get_rpm_href
@@ -444,6 +445,7 @@ sub run {
     all_malware_checks();
     check_for_openssl_heartbleed_bug();
     check_for_openssl_secadv_20140605();
+    check_for_dovecot_secadv_20197524();
 
     check_for_additional_rpms();
     check_for_percona_rpms();
@@ -470,6 +472,7 @@ sub csi_checks_only {
     all_malware_checks();
     check_for_openssl_heartbleed_bug();
     check_for_openssl_secadv_20140605();
+    check_for_dovecot_secadv_20197524();
     print_info2('SSP checks done.');
 }
 
@@ -6922,6 +6925,34 @@ sub check_for_bash_secadv_20140924 {
     print_critical();
 }
 
+# CVE-2019-7524
+sub check_for_dovecot_secadv_20197524 {
+    my $changelog_ref = get_dovecot_rpm_changelog_sref();
+    return unless $$changelog_ref;
+    return if grep { / CVE-2019-7524/ } $$changelog_ref;
+
+    chomp( my $dovecot_ver = timed_run( 0, 'dovecot', '--version' ) );
+    return if !$dovecot_ver;
+
+    # tidyoff - greater readability here than what tidy wants
+    # Vulnerable version: 2.0.14 - 2.3.5
+    return unless ( $dovecot_ver =~ /2\.(             # major 2.X.X
+                                         0\.{14,15}|  # minor 2.0.14 - 2.0.15
+                                         1\.(\d+)|    # minor 2.1.X
+                                         2\.(\d+)|    # minor 2.2.X
+                                         3\.[0-5])    # minor 2.3.0 - 2.3.5
+                                    /x
+                  );
+    # tidyon
+    print_critical();
+    print_crit('Dovecot: ');
+    print_critical('Send customer this premade: SECURITY - Dovecot CVE-2019-7524');
+    print_critical('The following check was used: rpm -q --changelog dovecot | grep \' CVE-2019-7524\'');
+    print_critical('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
+    print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
+    print_critical();
+}
+
 sub check_for_broken_mysqldump {
     return if i_am('dnsonly');
     return unless -f '/usr/bin/mysql';
@@ -8177,6 +8208,11 @@ sub get_printable_rpm_packages {
 
 sub get_openssl_rpm_changelog_sref {
     my $changelog = timed_run( 0, qw( rpm -q --changelog openssl ) );
+    return \$changelog;
+}
+
+sub get_dovecot_rpm_changelog_sref {
+    my $changelog = timed_run( 0, qw( rpm -q --changelog dovecot ) );
     return \$changelog;
 }
 
