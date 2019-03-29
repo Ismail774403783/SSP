@@ -418,6 +418,7 @@ sub run {
     check_for_saltstack();
     check_for_puppet_agent();
     check_imunify360_running();
+    check_for_etc_ubic_dir();
 
     # [3RDP]
     check_smtp_processes();
@@ -5615,6 +5616,13 @@ sub check_imunify360_running {
     print_warn("Imunify360 is running: ");
     print_warning("Issues with installing PECL extensions or running PHP's composer? Try setting Imunify360's Proactive Defense to log mode");
 
+}
+
+sub check_for_etc_ubic_dir {
+    if ( -e '/etc/ubic' ) {
+        print_warn('/etc/ubic: ');
+        print_warning('exists! This directory will cause ea-tomcat85 to fail when adding new users, see TECH-707');
+    }
 }
 
 sub check_if_httpdconf_ipaddrs_exist {
