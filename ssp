@@ -5618,7 +5618,7 @@ sub check_imunify360_running {
 sub check_for_etc_ubic_dir {
     if ( -e '/etc/ubic' ) {
         print_warn('/etc/ubic: ');
-        print_warning('exists! This directory will cause ea-tomcat85 to fail when adding new users');
+        print_warning('exists! This directory will cause ea-tomcat85 to fail when adding new users, see TECH-707');
     }
 }
 
