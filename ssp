@@ -3215,6 +3215,7 @@ sub check_for_non_default_permissions {
     my %check = (
         '/'                   => { mode => [ '0755', '0555' ], perms_help => '.ftpquota issues? see ticket 4429843', attr_help => 'This can break EA. See ticket 4929961' },
         '/bin/bash'           => { mode => ['0755'] },
+        '/bin/df'             => { mode => ['0755'] },
         '/bin/gtar'           => { symlink => 'tar',    symlink_no_absolute => 1, perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/bin/gzip'           => { mode => ['755'],  perms_help          => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/bin/ln'             => { mode => [ '0755', '0555' ] },
