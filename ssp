@@ -269,6 +269,7 @@ sub run {
 
     ## [WARN]
     check_for_license_error();
+    check_for_license_creds();
     check_var_cpanel_users();
     check_port_hash();
     check_runlevel();
@@ -2510,6 +2511,22 @@ sub check_for_license_error {
     }
 }
 
+sub check_for_license_creds {
+    return unless i_am('cpanel');
+    my $license_creds_file = '/var/cpanel/licenseid_credentials.json';
+    my $license_creds_raw;
+    if ( open( my $fh, '<', $license_creds_file ) ) {
+        local $/ = undef;
+        $license_creds_raw = <$fh>;
+        close($fh);
+    }
+    my $license_creds_href = $license_creds_raw && get_json_href($license_creds_raw);
+    if ( !$license_creds_href || !keys(%$license_creds_href) ) {
+        print_warn('License Error: ');
+        print_warning( "$license_creds_file" . ' is missing or empty. Is port 2083 inbound open? This can cause login issues or "Unauthorized" error in AutoSSL' );
+    }
+}
+
 sub get_last_lines_from_file {
 
     # Returns array-ref containing the LAST $return_limit (number) lines that match $pattern which exist within $bytes_limit bytes of the end of $file.
@@ -3200,6 +3217,7 @@ sub check_for_non_default_permissions {
     my %check = (
         '/'                   => { mode => [ '0755', '0555' ], perms_help => '.ftpquota issues? see ticket 4429843', attr_help => 'This can break EA. See ticket 4929961' },
         '/bin/bash'           => { mode => ['0755'] },
+        '/bin/df'             => { mode => ['0755'] },
         '/bin/gtar'           => { symlink => 'tar',    symlink_no_absolute => 1, perms_help => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/bin/gzip'           => { mode => ['755'],  perms_help          => 'May prevent creating backups via cPanel UI if users can not use this.' },
         '/bin/ln'             => { mode => [ '0755', '0555' ] },
