@@ -6741,7 +6741,7 @@ sub check_for_hostname_park_zoneexists {
     my $hostname = get_hostname();
     if ( -f "/var/named/$hostname.db" and ( not defined $CPCONF{'allowparkonothers'} or $CPCONF{'allowparkonothers'} != 1 ) ) {
         print_warn('Parking: ');
-        print_warning('since zone of hostname exists, "Allow domain parking across accounts" must be ON to park on the hostname');
+        print_warning('since zone of hostname exists, "Allow cPanel users to create subdomains across accounts" must be ON to park on the hostname');
     }
 }
 
