@@ -269,6 +269,7 @@ sub run {
 
     ## [WARN]
     check_for_license_error();
+    check_for_license_creds();
     check_var_cpanel_users();
     check_port_hash();
     check_runlevel();
@@ -2505,6 +2506,22 @@ sub check_for_license_error {
     else {
         print_warn('License Error: ');
         print_warning( '[ ' . $license_error . ' ]' );
+    }
+}
+
+sub check_for_license_creds {
+    return unless i_am('cpanel');
+    my $license_creds_file = '/var/cpanel/licenseid_credentials.json';
+    my $license_creds_raw;
+    if ( open( my $fh, '<', $license_creds_file ) ) {
+        local $/ = undef;
+        $license_creds_raw = <$fh>;
+        close($fh);
+    }
+    my $license_creds_href = $license_creds_raw && get_json_href($license_creds_raw);
+    if ( !$license_creds_href || !keys(%$license_creds_href) ) {
+        print_warn('License Error: ');
+        print_warning( "$license_creds_file" . ' is missing or empty. Is port 2083 inbound open? This can cause login issues or "Unauthorized" error in AutoSSL' );
     }
 }
 
