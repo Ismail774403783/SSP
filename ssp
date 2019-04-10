@@ -439,6 +439,7 @@ sub run {
     check_for_usr_local_mis();
     check_for_opt_gsi_tools();
     check_for_pyxsoft_antimalware();
+    check_for_magicspam();
 
     # [CRIT] - Anything that requires a pre-defined response to be sent, escalation, or extreme care.
     check_for_unsupported_php();         # Extreme care!
@@ -7610,6 +7611,16 @@ sub check_for_pyxsoft_antimalware {
 
     print_3rdp("$dir: ");
     print_3rdp2('found! This has been known to cause failed uploads, segfaults on PHP-FPM, and 500 ISE. See TECH-174');
+}
+
+sub check_for_magicspam {
+    return unless i_am('cpanel');
+    my $dir = '/etc/magicspam';
+    return if !-d $dir;
+
+    my $running = exists_process_cmd(qr{ magicspam }xms) ? 'and' : 'but not';
+    print_3rdp('MagicSpam: ');
+    print_3rdp2( 'installed ' . "$running" . ' running. See TECH-725' );
 }
 
 ##############################
