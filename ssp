@@ -5715,7 +5715,7 @@ sub check_for_custom_repos {
             regex => qr{ \A pgdg-(\d+)-centos\.repo }x,
         },
         'City-Fan' => {
-            msg   => ': see TECH-716',
+            msg   => ' see TECH-716',
             regex => qr{ \A city-fan.org\.repo }x,
         },
     );
@@ -5727,10 +5727,11 @@ sub check_for_custom_repos {
 
     foreach my $repo (@dir_contents) {
         foreach my $key ( keys %custom_repos ) {
-            if ( $repo =~ m/ $custom_repos{$key}{regex} /xms ) {
+            if ( $repo =~ m/ ( $custom_repos{$key}{regex} ) /xms ) {
+                $custom_repos{$key}{file} = $1;
                 $hit++;
                 print_warn( 'Custom repo(s) found in ' . $yum_repos_dir . ":\n" ) if ( $hit eq 1 );
-                print_warning( "\t \\_ $key" . $custom_repos{$key}{msg} );
+                print_warning( "\t \\_ $key: " . $custom_repos{$key}{file} . $custom_repos{$key}{msg} );
             }
         }
     }
