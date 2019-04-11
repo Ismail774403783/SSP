@@ -356,7 +356,7 @@ sub run {
     check_for_zlib_h();
     check_if_httpdconf_ipaddrs_exist();
     check_distcache_and_libapr();
-    check_for_custom_postgres_repo();
+    check_for_custom_repos();
     check_for_rpm_overrides();
     check_var_cpanel_immutable_files();
     check_for_noxsave_in_grub_conf();
@@ -5705,27 +5705,34 @@ sub check_distcache_and_libapr {
     }
 }
 
-sub check_for_custom_postgres_repo {
+sub check_for_custom_repos {
     my $yum_repos_dir = '/etc/yum.repos.d/';
+    my $hit           = 0;
     my @dir_contents;
-    my $has_postgres_repo = 0;
+    my %custom_repos = (
+        'PostgreSQL' => {
+            msg   => '',
+            regex => qr{ \A pgdg-(\d+)-centos\.repo }x,
+        },
+        'City-Fan' => {
+            msg   => ': see TECH-716',
+            regex => qr{ \A city-fan.org\.repo }x,
+        },
+    );
 
     return if !-d $yum_repos_dir;
-
     opendir( my $dir_fh, $yum_repos_dir );
     @dir_contents = grep { !/^\.\.?$/ } readdir $dir_fh;
     closedir $dir_fh;
 
-    for my $repos (@dir_contents) {
-        if ( $repos =~ m{ \A pgdg-(\d+)-centos\.repo }xms ) {
-            $has_postgres_repo = 1;
-            last;
+    foreach my $repo (@dir_contents) {
+        foreach my $key ( keys %custom_repos ) {
+            if ( $repo =~ m/ $custom_repos{$key}{regex} /xms ) {
+                $hit++;
+                print_warn( 'Custom repo(s) found in ' . $yum_repos_dir . ":\n" ) if ( $hit eq 1 );
+                print_warning( "\t \\_ $key" . $custom_repos{$key}{msg} );
+            }
         }
-    }
-
-    if ($has_postgres_repo) {
-        print_warn('PostgreSQL: ');
-        print_warning('custom Postgres repo (pgdg-*) found in /etc/yum.repos.d/ . See tickets 3690445, 3568781');
     }
 }
 
