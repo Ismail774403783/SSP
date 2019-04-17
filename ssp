@@ -109,8 +109,7 @@ sub init {
           get_mysql_numeric_version
           get_new_backup_conf_href
           get_old_backup_conf_href
-          get_openssl_rpm_changelog_sref
-          get_dovecot_rpm_changelog_sref
+          get_rpm_changelog_href
           get_phpini_aref
           get_process_pid_href
           get_rpm_href
@@ -6892,15 +6891,12 @@ sub check_for_cron_allow {
 sub check_for_openssl_heartbleed_bug {
     return if os_version_is(qw( >= 6.6 ));
     return if os_version_is(qw( <= 5 ));
-    my $changelog_ref = get_openssl_rpm_changelog_sref();
-    return unless $$changelog_ref;
-    return if grep { / CVE-2014-0160 / } $$changelog_ref;
-
-    chomp( my $openssl_ver = timed_run( 0, 'openssl', 'version' ) );
-    return if !$openssl_ver;
+    my $changelog_href = get_rpm_changelog_href();
+    return unless $changelog_href;
+    return if $changelog_href->{openssl}->{'CVE-2014-0160'}->{seen};
 
     # only 1.0.1[a-f] is vuln (and 1.0.2-beta which no one should be using)
-    return unless ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)[a-f]/ );
+    return unless ( $changelog_href->{openssl}->{version} =~ /(\d+)\.(\d+)\.(\d+)[a-f]/ );
 
     my ( $maj, $min, $patch ) = ( $1, $2, $3 );
     return if $maj != 1;
@@ -6918,15 +6914,12 @@ sub check_for_openssl_heartbleed_bug {
 
 sub check_for_openssl_secadv_20140605 {
     return unless os_version_is(qw( <= 6 ));    # Only RHEL/CentOS 5 and 6 need apply
-    my $changelog_ref = get_openssl_rpm_changelog_sref();
-    return unless $$changelog_ref;
-    return if grep { / CVE-2014-0224 / } $$changelog_ref;
-
-    chomp( my $openssl_ver = timed_run( 0, 'openssl', 'version' ) );
-    return if !$openssl_ver;
+    my $changelog_href = get_rpm_changelog_href();
+    return unless $changelog_href;
+    return if $changelog_href->{openssl}->{'CVE-2014-0224'}->{seen};
 
     # fixed in openssl 1.0.1h, 1.0.0m, and 0.9.8za
-    return unless ( $openssl_ver =~ /^OpenSSL (\d+)\.(\d+)\.(\d+)([a-z])([a-z]?)/ );
+    return unless ( $changelog_href->{openssl}->{version} =~ /(\d+)\.(\d+)\.(\d+)([a-z])([a-z]?)/ );
 
     my ( $maj, $min, $patch ) = ( $1, $2, $3 );
 
@@ -6963,21 +6956,19 @@ sub check_for_bash_secadv_20140924 {
 
 # CVE-2019-7524
 sub check_for_dovecot_secadv_20197524 {
-    my $changelog_ref = get_dovecot_rpm_changelog_sref();
-    return unless $$changelog_ref;
-    return if grep { / CVE-2019-7524/ } $$changelog_ref;
-
-    chomp( my $dovecot_ver = timed_run( 0, 'dovecot', '--version' ) );
-    return if !$dovecot_ver;
+    my $changelog_href = get_rpm_changelog_href();
+    return unless $changelog_href;
+    return if $changelog_href->{dovecot}->{'CVE-2019-7524'}->{seen};
+    return if !$changelog_href->{dovecot}->{version};
 
     # tidyoff - greater readability here than what tidy wants
     # Vulnerable version: 2.0.14 - 2.3.5
-    return unless ( $dovecot_ver =~ /2\.(             # major 2.X.X
-                                         0\.{14,15}|  # minor 2.0.14 - 2.0.15
-                                         1\.(\d+)|    # minor 2.1.X
-                                         2\.(\d+)|    # minor 2.2.X
-                                         3\.[0-5])    # minor 2.3.0 - 2.3.5
-                                    /x
+    return unless ( $changelog_href->{dovecot}->{version} =~ /2\.(             # major 2.X.X
+                                                                  0\.{14,15}|  # minor 2.0.14 - 2.0.15
+                                                                  1\.(\d+)|    # minor 2.1.X
+                                                                  2\.(\d+)|    # minor 2.2.X
+                                                                  3\.[0-5])    # minor 2.3.0 - 2.3.5
+                                                             /x
                   );
     # tidyon
     print_critical();
@@ -8261,14 +8252,43 @@ sub get_printable_rpm_packages {
     return @list;
 }
 
-sub get_openssl_rpm_changelog_sref {
-    my $changelog = timed_run( 0, qw( rpm -q --changelog openssl ) );
-    return \$changelog;
-}
+sub get_rpm_changelog_href {
+    my $field_separator   = '#^#';
+    my $query_format      = '\'' . $field_separator . '%{NAME}' . $field_separator . '%{VERSION}\\n\'';
+    my %changelog_queries = (
+        'openssl' => {
+            'CVE-2014-0160' => {
+                regex => qr{ CVE-2014-0160 },
+                seen  => 0,
+            },
+            'CVE-2014-0224' => {
+                regex => qr{ CVE-2014-0224 },
+                seen  => 0,
+            },
+        },
+        'dovecot' => {
+            'CVE-2019-7524' => {
+                regex => qr{ CVE-2019-7524},
+                seen  => 0,
+            },
+        },
+    );
 
-sub get_dovecot_rpm_changelog_sref {
-    my $changelog = timed_run( 0, qw( rpm -q --changelog dovecot ) );
-    return \$changelog;
+    my $changelog = timed_run( 0, 'rpm --queryformat ' . $query_format . ' -q ' . join( ' ', keys %changelog_queries ) . ' --changelog' );
+    my $package;
+    open( my $fh, '<', \$changelog );
+    while (<$fh>) {
+        chomp;
+        if ( $_ =~ m/ \A \Q$field_separator\E (\w+) \Q$field_separator\E ([\w\.]+) /xms ) {
+            $package = $1;
+            $changelog_queries{$package}{version} = $2;
+        }
+        foreach my $cve ( grep { /^CVE/ } keys %{ $changelog_queries{$package} } ) {
+            $changelog_queries{$package}{$cve}{seen} = 1 if ( $_ =~ m/$changelog_queries{$package}{$cve}{regex}/ms );
+        }
+    }
+    close($fh);
+    return \%changelog_queries;
 }
 
 sub get_flat_conf_href {

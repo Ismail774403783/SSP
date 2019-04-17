@@ -8,6 +8,7 @@ PERLCRITICRC=tools/.perlcriticrc
 PERLTIDY=$(PERL_BIN_BASE)/perltidy
 PERLTIDYRC=tools/.perltidyrc
 PERLTIDYRC_MINIFY=tools/.perltidyrc.minify
+PERLPROVE=$(PERL_BIN_BASE)/prove
 NEW_VER=$(shell grep 'our $$VERSION' $(PROJECT) | awk '{print $$4}' | sed -e "s/'//g" -e 's/;//')
 
 .DEFAULT: help
@@ -63,6 +64,8 @@ test:
 	perl -c $(PROJECT) || ( echo "$(PROJECT) perl syntax check failed"; exit 2 )
 	echo "-- Running perlcritic"
 	$(PERLCRITIC) --profile $(PERLCRITICRC) $(PROJECT)
+	echo "-- Running prove"
+	$(PERLPROVE)
 
 ## Run perltidy, compare, and ask for overwrite
 tidy: test $(PROJECT).tdy
