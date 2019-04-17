@@ -6980,6 +6980,39 @@ sub check_for_dovecot_secadv_20197524 {
     print_critical();
 }
 
+# CVE-2019-0211
+sub check_for_apache_secadv_20190211 {
+
+    # Affects 2.4.38, 2.4.37, 2.4.35, 2.4.34, 2.4.33, 2.4.30, 2.4.29, 2.4.28, 2.4.27, 2.4.26, 2.4.25, 2.4.23, 2.4.20, 2.4.18, 2.4.17
+    # EA3 check since LTS is still 70 and therefore EA3 still supported
+    my $apache_version;
+    if ( i_am('ea3') ) {
+        $apache_version = get_apache_version();
+    }
+    my $changelog_href;
+    if ( i_am('ea4') ) {
+        $changelog_href = get_rpm_changelog_href();
+        return unless $changelog_href;
+        return if $changelog_href->{'ea-apache24'}->{'CVE-2019-0211'}->{seen};
+    }
+    $apache_version = $apache_version ? $apache_version : $changelog_href->{'ea-apache24'}->{version};
+    # tidyoff - greater readability here than what tidy wants
+    return unless ( $apache_version =~ /2\.4\.(            # 2.4.X
+                                               3[034578]|  # 2.4.3X
+                                               2[0356789]| # 2.4.2X
+                                               1[78])      # 2.4.1X
+                                       /x
+                  );
+    # tidyon
+
+    print_critical();
+    print_critical('Send customer this premade: SECURITY - CVE-2019-0211 (Apache 2.4.38)');
+    print_critical('The following check was used: rpm -q --changelog ea-apache24 | grep \'CVE-2019-0211:\'');
+    print_critical('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
+    print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
+    print_critical();
+}
+
 sub check_for_broken_mysqldump {
     return if i_am('dnsonly');
     return unless -f '/usr/bin/mysql';
@@ -8272,6 +8305,12 @@ sub get_rpm_changelog_href {
                 seen  => 0,
             },
         },
+        'ea-apache24' => {
+            'CVE-2019-0211' => {
+                regex => qr{CVE-2019-0211:},
+                seen  => 0,
+            },
+        },
     );
 
     my $changelog = timed_run( 0, 'rpm --queryformat ' . $query_format . ' -q ' . join( ' ', keys %changelog_queries ) . ' --changelog' );
@@ -8279,7 +8318,7 @@ sub get_rpm_changelog_href {
     open( my $fh, '<', \$changelog );
     while (<$fh>) {
         chomp;
-        if ( $_ =~ m/ \A \Q$field_separator\E (\w+) \Q$field_separator\E ([\w\.]+) /xms ) {
+        if ( $_ =~ m/ \A \Q$field_separator\E ([\w-]+) \Q$field_separator\E ([\w\.]+) /xms ) {
             $package = $1;
             $changelog_queries{$package}{version} = $2;
         }
