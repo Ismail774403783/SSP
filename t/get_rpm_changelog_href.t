@@ -2,11 +2,10 @@
 
 use strict;
 use warnings;
-use Data::Dumper;
 require './ssp';
 use lib '/usr/local/cpanel/3rdparty/perl/528/lib/perl5/cpanel_lib';
 use Test::MockModule;
-use Test::Simple tests => 3;
+use Test::Simple tests => 5;
 
 my $mock = Test::MockModule->new('SSP');
 $mock->mock( timed_run => sub {
@@ -24,6 +23,8 @@ $mock->mock( timed_run => sub {
 
 my $changelog_href = SSP::get_rpm_changelog_href();
 
+ok( defined $changelog_href->{dovecot}->{version}, 'Checking for dovecot version' );
 ok( $changelog_href->{dovecot}->{'CVE-2019-7524'}->{seen} eq 1, 'Checking dovecot for CVE-2019-7524' );
+ok( defined $changelog_href->{openssl}->{version}, 'Checking for openssl version' );
 ok( $changelog_href->{openssl}->{'CVE-2014-0224'}->{seen} eq 1, 'Checking openssl for CVE-2014-0224' );
 ok( $changelog_href->{openssl}->{'CVE-2014-0160'}->{seen} eq 1, 'Checking openssl for CVE-2014-0160' );
