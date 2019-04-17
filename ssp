@@ -6865,7 +6865,7 @@ sub check_for_openssl_heartbleed_bug {
     return if os_version_is(qw( <= 5 ));
     my $changelog_href = get_rpm_changelog_href();
     return unless $changelog_href;
-    return if $changelog_href->{openssl}->{'CVE-2014-0160'}->{seen} eq 1;
+    return if $changelog_href->{openssl}->{'CVE-2014-0160'}->{seen};
 
     # only 1.0.1[a-f] is vuln (and 1.0.2-beta which no one should be using)
     return unless ( $changelog_href->{openssl}->{version} =~ /(\d+)\.(\d+)\.(\d+)[a-f]/ );
@@ -6888,7 +6888,7 @@ sub check_for_openssl_secadv_20140605 {
     return unless os_version_is(qw( <= 6 ));    # Only RHEL/CentOS 5 and 6 need apply
     my $changelog_href = get_rpm_changelog_href();
     return unless $changelog_href;
-    return if $changelog_href->{openssl}->{'CVE-2014-0224'}->{seen} eq 1;
+    return if $changelog_href->{openssl}->{'CVE-2014-0224'}->{seen};
 
     # fixed in openssl 1.0.1h, 1.0.0m, and 0.9.8za
     return unless ( $changelog_href->{openssl}->{version} =~ /(\d+)\.(\d+)\.(\d+)([a-z])([a-z]?)/ );
@@ -6930,7 +6930,7 @@ sub check_for_bash_secadv_20140924 {
 sub check_for_dovecot_secadv_20197524 {
     my $changelog_href = get_rpm_changelog_href();
     return unless $changelog_href;
-    return if $changelog_href->{dovecot}->{'CVE-2019-7524'}->{seen} eq 1;
+    return if $changelog_href->{dovecot}->{'CVE-2019-7524'}->{seen};
     return if !$changelog_href->{dovecot}->{version};
 
     # tidyoff - greater readability here than what tidy wants
@@ -8232,7 +8232,7 @@ sub get_rpm_changelog_href {
     open( my $fh, '<', \$changelog );
     while (<$fh>) {
         chomp;
-        if ( $_ =~ m/ \A \Q$field_separator\E (\w+) \Q$field_separator\E ([\w\.]+)/xms ) {
+        if ( $_ =~ m/ \A \Q$field_separator\E (\w+) \Q$field_separator\E ([\w\.]+) /xms ) {
             $package = $1;
             $changelog_queries{$package}{version} = $2;
         }
