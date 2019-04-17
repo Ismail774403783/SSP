@@ -8236,7 +8236,7 @@ sub get_rpm_changelog_href {
             $package = $1;
             $changelog_queries{$package}{version} = $2;
         }
-        foreach my $cve ( grep { /^CVE/ } keys %{ $changelog_queries{$1} } ) {
+        foreach my $cve ( grep { /^CVE/ } keys %{ $changelog_queries{$package} } ) {
             $changelog_queries{$package}{$cve}{seen} = 1 if ( $_ =~ m/$changelog_queries{$package}{$cve}{regex}/ms );
         }
     }
