@@ -6891,8 +6891,7 @@ sub check_for_cron_allow {
 sub check_for_openssl_heartbleed_bug {
     return if os_version_is(qw( >= 6.6 ));
     return if os_version_is(qw( <= 5 ));
-    my $changelog_href = get_rpm_changelog_href();
-    return unless $changelog_href;
+    return unless my $changelog_href = get_rpm_changelog_href();
     return if $changelog_href->{openssl}->{'CVE-2014-0160'}->{seen};
 
     # only 1.0.1[a-f] is vuln (and 1.0.2-beta which no one should be using)
