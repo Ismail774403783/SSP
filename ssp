@@ -6891,7 +6891,8 @@ sub check_for_cron_allow {
 sub check_for_openssl_heartbleed_bug {
     return if os_version_is(qw( >= 6.6 ));
     return if os_version_is(qw( <= 5 ));
-    return unless my $changelog_href = get_rpm_changelog_href();
+    my $changelog_href = get_rpm_changelog_href();
+    return unless $changelog_href->{openssl}->{version};
     return if $changelog_href->{openssl}->{'CVE-2014-0160'}->{seen};
 
     # only 1.0.1[a-f] is vuln (and 1.0.2-beta which no one should be using)
@@ -6914,7 +6915,7 @@ sub check_for_openssl_heartbleed_bug {
 sub check_for_openssl_secadv_20140605 {
     return unless os_version_is(qw( <= 6 ));    # Only RHEL/CentOS 5 and 6 need apply
     my $changelog_href = get_rpm_changelog_href();
-    return unless $changelog_href;
+    return unless $changelog_href->{openssl}->{version};
     return if $changelog_href->{openssl}->{'CVE-2014-0224'}->{seen};
 
     # fixed in openssl 1.0.1h, 1.0.0m, and 0.9.8za
@@ -6956,7 +6957,7 @@ sub check_for_bash_secadv_20140924 {
 # CVE-2019-7524
 sub check_for_dovecot_secadv_20197524 {
     my $changelog_href = get_rpm_changelog_href();
-    return unless $changelog_href;
+    return unless $changelog_href->{dovecot}->{version};
     return if $changelog_href->{dovecot}->{'CVE-2019-7524'}->{seen};
     return if !$changelog_href->{dovecot}->{version};
 
@@ -6991,7 +6992,7 @@ sub check_for_apache_secadv_20190211 {
     my $changelog_href;
     if ( i_am('ea4') ) {
         $changelog_href = get_rpm_changelog_href();
-        return unless $changelog_href;
+        return unless $changelog_href->{'ea-apache24'}->{version};
         return if $changelog_href->{'ea-apache24'}->{'CVE-2019-0211'}->{seen};
     }
     $apache_version = $apache_version ? $apache_version : $changelog_href->{'ea-apache24'}->{version};
@@ -8321,8 +8322,10 @@ sub get_rpm_changelog_href {
             $package = $1;
             $changelog_queries{$package}{version} = $2;
         }
-        foreach my $cve ( grep { /^CVE/ } keys %{ $changelog_queries{$package} } ) {
-            $changelog_queries{$package}{$cve}{seen} = 1 if ( $_ =~ m/$changelog_queries{$package}{$cve}{regex}/ms );
+        if ($package) {
+            foreach my $cve ( grep { /^CVE/ } keys %{ $changelog_queries{$package} } ) {
+                $changelog_queries{$package}{$cve}{seen} = 1 if ( $_ =~ m/$changelog_queries{$package}{$cve}{regex}/ms );
+            }
         }
     }
     close($fh);
