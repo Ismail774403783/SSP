@@ -7783,6 +7783,7 @@ sub check_for_libkeyutils_filenames {
     my $bad_libs;
     my @dirs  = qw( /lib /lib64 );
     my @files = qw(
+      libhdx.so
       libkeyutils.so.1.9
       libkeyutils-1.2.so.0
       libkeyutils-1.2.so.2
