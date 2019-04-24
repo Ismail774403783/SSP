@@ -8266,7 +8266,7 @@ sub check_for_xbash {
     if ($hit) {
         print_generic_hack_predef('Xbash');
         print_critical("\tThe following files or directories were found:");
-        print_critical("\t\t" . $mysql_datadir . '/PLEASE_READ_ME*');
+        print_critical( "\t\t" . $mysql_datadir . 'PLEASE_READ_ME*' );
         print_critical("\t\tL3: See TECH-736");
     }
 }
