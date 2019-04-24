@@ -507,6 +507,7 @@ sub all_malware_checks {
     check_for_yoncu();
     check_for_cgls();
     check_for_ctls();
+    check_for_xbash();
 }
 
 sub get_phpini_aref {
@@ -8251,6 +8252,20 @@ sub check_for_ctls {
         print_critical( "\t" . join( " ", @bad_paths ) );
         print_critical("\tL3: See TECH-642 for reference.");
         print_critical();
+    }
+}
+
+sub check_for_xbash {
+    return unless my $mysql_datadir = get_mysql_datadir();
+    opendir( my $dh, $mysql_datadir );
+    my $hit = grep { /PLEASE_READ_ME/ } readdir $dh;
+    closedir $dh;
+
+    if ($hit) {
+        print_generic_hack_predef('Xbash');
+        print_critical("\tThe following files or directories were found:");
+        print_critical("\t\t" . $mysql_datadir . '/PLEASE_READ_ME*');
+        print_critical("\t\tL3: See TECH-736");
     }
 }
 
