@@ -157,6 +157,7 @@ sub run {
     local @ARGV = @_;    # Because GetOptionsFromArray available in Getopt::Long 2.36 and later only, Perl 5.8.8 on CentOS 5.11 includes 2.35
 
     Getopt::Long::GetOptions(
+        'help'      => sub { exit print_help(); },
         'bugreport' => sub { init(); exit print_bug_report(); },
         'csi'       => sub { init(); exit csi_checks_only(); },
         'docreport' => sub { init(); exit print_doc_bug_report(); },
@@ -467,6 +468,25 @@ sub run {
 
     print_profiling_data();
     return 0;
+}
+
+sub print_help {
+    print BOLD YELLOW ON_BLACK "System Status Probe $VERSION\n" . RESET;
+    (
+        my $message = q{
+        This software is Copyright 2017 by cPanel, Inc.
+        Find and print useful troubleshooting info on cPanel servers.
+
+        Usage: ssp [option]
+            --bugreport         Provide bug report template along with environment details (intended for cPanel tech use only)
+            --csi               cPanel Security Inspection, run's several security checks
+            --docreport         Provide document bug report template (intended for cPanel tech use only)
+            --no-network        Skip all network related checks
+            --timeout           This overides timeouts of several longer running functions (min: 5s)
+
+        }
+    ) =~ s/^ {8}//mg;
+    print $message;
 }
 
 sub csi_checks_only {
