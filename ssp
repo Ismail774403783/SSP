@@ -325,6 +325,7 @@ sub run {
     check_usr_local_cpanel_path_for_symlinks();
     check_for_system_mem_below_required();
     check_yum_conf();
+    check_yum_plugins();
     check_for_cpanel_files();
     check_bash_history_for_certain_commands();
     check_roots_cron_for_certain_commands();
@@ -4539,6 +4540,36 @@ sub check_yum_conf {
     if ($remove_leaf_only_enabled) {
         print_warn('YUM: ');
         print_warning( 'remove_leaf_only=1 found in ' . $yum_conf . '.  This is known to cause issues with EA4 provisioning.' );
+    }
+}
+
+sub check_yum_plugins {
+    return if ( i_am('ea3') );
+    my $plugin_dir = '/etc/yum/pluginconf.d/';
+    my %plugins    = (
+        'universal-hooks.conf' => 0,
+    );
+
+    if ( !-e $plugin_dir ) {
+        print_warn('YUM: ');
+        print_warning( $plugin_dir . ' does not exist! This can break MultiPHP, see TECH-655' );
+        return;
+    }
+    foreach my $key ( keys %plugins ) {
+        if ( !-e $plugin_dir . $key || -z $plugin_dir . $key ) {
+            print_warn('YUM: ');
+            print_warning( $plugin_dir . $key . ' is either empty or missing! This can break MultiPHP, see TECH-655' );
+        }
+        elsif ( open my $fh, '<', $plugin_dir . $key ) {
+            while (<$fh>) {
+                $plugins{$key} = 1 if (m/ \A \s* enabled \s* = \s* 1 \s* \Z /xmsi);
+            }
+            close($fh);
+            if ( !$plugins{$key} ) {
+                print_warn('YUM: ');
+                print_warning( $plugin_dir . $key . ' is not enabled! This can break MultiPHP, see TECH-655' );
+            }
+        }
     }
 }
 
