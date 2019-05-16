@@ -4566,7 +4566,7 @@ sub check_yum_plugins {
         return;
     }
     foreach my $type ( keys %plugins ) {
-        next unless i_am( $type );
+        next unless i_am($type);
         foreach my $plugin ( keys %{ $plugins{$type} } ) {
             if ( !-e $plugin_dir . $plugin || -z $plugin_dir . $plugin ) {
                 print_warn('YUM: ');
