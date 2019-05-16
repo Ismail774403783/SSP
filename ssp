@@ -1324,7 +1324,7 @@ sub check_for_multiple_tech_logins {
         }
         if ( $line =~ m{ \((.+)\)\Z }xms ) {
             if (   $1 =~ m{ \A (.*\.)?(cptxoffice\.net|cloudlinux\.com|litespeedtech.com)(:|$) }xms
-                || $1 =~ m{ \A (208\.74\.12[0-7]\.\d+|69\.175\.92\.(4[89]|5[0-9]|6[0-4])|69\.10\.42\.69)(:|$) }xms ) {
+                || $1 =~ m{ \A (208\.74\.123\.98|184\.94\.197\.[2-6])(:|$) }xms ) {
                 push( @tech_logins, $line );
                 $num_logins++;
             }
@@ -8776,7 +8776,7 @@ sub _populate_run_state {    ## no critic (RequireArgUnpacking)
     else {
         foreach ( @ENV{ 'SSH_CLIENT', 'SSH_CONNECTION' } ) {
             next unless defined $_;
-            next unless m{\A 208\.74\.12[0-7]}xms;
+            next unless m{\A (184\.94\.197\.[2-6]|208\.74\.123\.98)}xms;
             _set_run_type('cptech');
             last;
         }
