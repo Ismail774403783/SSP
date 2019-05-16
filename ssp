@@ -6387,13 +6387,27 @@ sub check_for_allow_query_localhost {
 }
 
 sub check_for_nocloudlinux_touchfile {
-    if ( -e '/var/cpanel/nocloudlinux' ) {
-        print_warn('/var/cpanel/nocloudlinux: ');
-        print_warning('exists! CloudLinux cannot be installed when this file is present.');
+    if ( -e '/var/cpanel/nocloudlinux' && -e '/var/cpanel/disabled/cloudlinux' ) {
+        print_warn('nocloudlinux: ');
+        print_warning('\'/var/cpanel/nocloudlinux\' and \'/var/cpanel/disabled/cloudlinux\' exist! These block cPanel from installing/updating CloudLinux via:');
+        print_warning( "\t \\_ " . '/usr/local/cpanel/scripts/cpanel_initial_install' );
+        print_warning( "\t \\_ " . '/usr/local/cpanel/bin/cloudlinux_update' );
+        print_warning( "\t \\_ " . '/usr/local/cpanel/bin/cloudlinux_system_install' );
+        return;
+    }
+    elsif ( -e '/var/cpanel/nocloudlinux' ) {
+        print_warn('nocloudlinux: ');
+        print_warning('\'/var/cpanel/nocloudlinux\' exists! This blocks cPanel from installing/updating CloudLinux via:');
+        print_warning( "\t \\_ " . '/usr/local/cpanel/scripts/cpanel_initial_install' );
+        print_warning( "\t \\_ " . '/usr/local/cpanel/bin/cloudlinux_update' );
+        print_warning( "\t \\_ " . '/usr/local/cpanel/bin/cloudlinux_system_install' );
+        return;
     }
     elsif ( -e '/var/cpanel/disabled/cloudlinux' ) {
-        print_warn('/var/cpanel/disabled/cloudlinux');
-        print_warning('exists! CloudLinux cannot be installed when this file is present.');
+        print_warn('nocloudlinux: ');
+        print_warning('\'/var/cpanel/disabled/cloudlinux\' exists! This blocks cPanel from installing/updating CloudLinux via:');
+        print_warning( "\t \\_ " . '/usr/local/cpanel/scripts/cpanel_initial_install' );
+        print_warning( "\t \\_ " . '/usr/local/cpanel/bin/cloudlinux_update' );
     }
 }
 
