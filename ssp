@@ -5526,7 +5526,7 @@ sub check_mysql_skip_grants {
     my $ver = timed_run( 0, 'mysql', '--user=root', '--password=' . $fake_pass, '-NBe', 'SELECT version()' );
     if ($ver) {
         print_crit('MySQL: ');
-        print_critical('Root MySQL access was gained with a random password, is \'skip-grant-tables\' enabled?');
+        print_critical('Root MySQL access was obtained with a random password, is \'skip-grant-tables\' enabled?');
         print_critical( "\t \\_ " . 'Verify \'skip-grant-tables\' is enabled and inform the client of the inherent risks of running MySQL without grants' );
     }
 }
