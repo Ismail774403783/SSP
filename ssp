@@ -459,6 +459,7 @@ sub run {
     check_for_frontpage_rpms();
     check_for_broken_rpm();
     check_for_ea4_mismatch();
+    check_mysql_skip_grants();
 
     print_info2('Done.');
 
@@ -497,6 +498,7 @@ sub csi_checks_only {
     check_for_openssl_heartbleed_bug();
     check_for_openssl_secadv_20140605();
     check_for_dovecot_secadv_20197524();
+    check_mysql_skip_grants();
     print_info2('SSP checks done.');
 }
 
@@ -5501,6 +5503,20 @@ sub check_for_ea4_mismatch {
     print_warning(qq{Found $cl_count "ea-*.cloudlinux" RPMs on a non-CloudLinux system!  Using wrong EA4 repo?});
     if ( -e '/etc/yum.repos.d/imunify360-ea-php-hardened.repo' ) {
         print_warning('         \_ Imunify360 Hardened EA-PHP repo found. It is probably OK if all of the RPMs originated from this repo.');
+    }
+}
+
+sub check_mysql_skip_grants {
+    return unless i_am_one_of( 'cpanel', 'dnsonly' );
+    return unless exists_process_cmd( qr{ /mysqld }xms, 'mysql' );
+
+    # Test with very unique password, if it works, 99% skip-grants is enabled
+    my $fake_pass = 'KsA9tsRzaoa01dWl1dJBv9WtyA5Ahe7T2qrzVt7MPNa9IrdnEsRVI8raUUOtQ8Xls1SroikQy4gm1ohU';
+    my $ver = timed_run( 0, 'mysql', '--user=root', '--password=' . $fake_pass, '-NBe', 'SELECT version()' );
+    if ($ver) {
+        print_crit('MySQL: ');
+        print_critical('Root MySQL access was gained with a random password, is \'skip-grant-tables\' enabled?');
+        print_critical( "\t \\_ " . 'Verify \'skip-grant-tables\' is enabled and inform the client of the inherent risks of running MySQL without grants' );
     }
 }
 
