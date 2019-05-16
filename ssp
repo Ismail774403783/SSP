@@ -4546,10 +4546,18 @@ sub check_yum_conf {
 }
 
 sub check_yum_plugins {
-    return if ( i_am('ea3') );
     my $plugin_dir = '/etc/yum/pluginconf.d/';
     my %plugins    = (
-        'universal-hooks.conf' => 0,
+        'ea4' => {
+            'universal-hooks.conf' => {
+                msg => 'This can break MultiPHP, see TECH-655',
+            },
+        },
+        'cloudlinux' => {
+            'rhnplugin.conf' => {
+                msg => 'This breaks CloudLinux updates',
+            },
+        },
     );
 
     if ( !-e $plugin_dir ) {
@@ -4557,19 +4565,22 @@ sub check_yum_plugins {
         print_warning( $plugin_dir . ' does not exist! This can break MultiPHP, see TECH-655' );
         return;
     }
-    foreach my $key ( keys %plugins ) {
-        if ( !-e $plugin_dir . $key || -z $plugin_dir . $key ) {
-            print_warn('YUM: ');
-            print_warning( $plugin_dir . $key . ' is either empty or missing! This can break MultiPHP, see TECH-655' );
-        }
-        elsif ( open my $fh, '<', $plugin_dir . $key ) {
-            while (<$fh>) {
-                $plugins{$key} = 1 if (m/ \A \s* enabled \s* = \s* 1 \s* \Z /xmsi);
-            }
-            close($fh);
-            if ( !$plugins{$key} ) {
+    foreach my $type ( keys %plugins ) {
+        next unless i_am( $type );
+        foreach my $plugin ( keys %{ $plugins{$type} } ) {
+            if ( !-e $plugin_dir . $plugin || -z $plugin_dir . $plugin ) {
                 print_warn('YUM: ');
-                print_warning( $plugin_dir . $key . ' is not enabled! This can break MultiPHP, see TECH-655' );
+                print_warning( $plugin_dir . $plugin . ' is either empty or missing! ' . $plugins{$type}{$plugin}{'msg'} );
+            }
+            elsif ( open my $fh, '<', $plugin_dir . $plugin ) {
+                while (<$fh>) {
+                    $plugins{$type}{$plugin}{'enabled'} = 1 if (m/ \A \s* enabled \s* = \s* 1 \s* \Z /xmsi);
+                }
+                close($fh);
+                if ( !$plugins{$type}{$plugin}{'enabled'} ) {
+                    print_warn('YUM: ');
+                    print_warning( $plugin_dir . $plugin . ' is not enabled! ' . $plugins{$type}{$plugin}{'msg'} );
+                }
             }
         }
     }
