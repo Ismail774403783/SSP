@@ -34,7 +34,7 @@ use Cwd qw(abs_path);
 use Getopt::Long();
 
 # Application version (The project maintainer will bump this, don't modify it.)
-our $VERSION = '4.99.205';
+our $VERSION = '4.99.206';
 
 # Global variables that alter application runtime
 our $OPT_SKIP_NETWORKING;    # Disable network calls
@@ -157,6 +157,7 @@ sub run {
     local @ARGV = @_;    # Because GetOptionsFromArray available in Getopt::Long 2.36 and later only, Perl 5.8.8 on CentOS 5.11 includes 2.35
 
     Getopt::Long::GetOptions(
+        'help'      => sub { exit print_help(); },
         'bugreport' => sub { init(); exit print_bug_report(); },
         'csi'       => sub { init(); exit csi_checks_only(); },
         'docreport' => sub { init(); exit print_doc_bug_report(); },
@@ -324,6 +325,7 @@ sub run {
     check_usr_local_cpanel_path_for_symlinks();
     check_for_system_mem_below_required();
     check_yum_conf();
+    check_yum_plugins();
     check_for_cpanel_files();
     check_bash_history_for_certain_commands();
     check_roots_cron_for_certain_commands();
@@ -457,6 +459,7 @@ sub run {
     check_for_frontpage_rpms();
     check_for_broken_rpm();
     check_for_ea4_mismatch();
+    check_mysql_skip_grants();
 
     print_info2('Done.');
 
@@ -469,6 +472,25 @@ sub run {
     return 0;
 }
 
+sub print_help {
+    print BOLD YELLOW ON_BLACK "System Status Probe $VERSION\n" . RESET;
+    (
+        my $message = q{
+        This software is Copyright 2017 by cPanel, Inc.
+        Find and print useful troubleshooting info on cPanel servers.
+
+        Usage: ssp [option]
+            --bugreport         Provide bug report template along with environment details (intended for cPanel tech use only)
+            --csi               cPanel Security Inspection, run's several security checks
+            --docreport         Provide document bug report template (intended for cPanel tech use only)
+            --no-network        Skip all network related checks
+            --timeout           This overides timeouts of several longer running functions (min: 5s)
+
+        }
+    ) =~ s/^ {8}//mg;
+    print $message;
+}
+
 sub csi_checks_only {
     check_port_hash();
     check_for_bash_secadv_20140924();    # advisory
@@ -476,6 +498,7 @@ sub csi_checks_only {
     check_for_openssl_heartbleed_bug();
     check_for_openssl_secadv_20140605();
     check_for_dovecot_secadv_20197524();
+    check_mysql_skip_grants();
     print_info2('SSP checks done.');
 }
 
@@ -1324,7 +1347,7 @@ sub check_for_multiple_tech_logins {
         }
         if ( $line =~ m{ \((.+)\)\Z }xms ) {
             if (   $1 =~ m{ \A (.*\.)?(cptxoffice\.net|cloudlinux\.com|litespeedtech.com)(:|$) }xms
-                || $1 =~ m{ \A (208\.74\.12[0-7]\.\d+|69\.175\.92\.(4[89]|5[0-9]|6[0-4])|69\.10\.42\.69)(:|$) }xms ) {
+                || $1 =~ m{ \A (208\.74\.123\.98|184\.94\.197\.[2-6])(:|$) }xms ) {
                 push( @tech_logins, $line );
                 $num_logins++;
             }
@@ -4522,6 +4545,47 @@ sub check_yum_conf {
     }
 }
 
+sub check_yum_plugins {
+    my $plugin_dir = '/etc/yum/pluginconf.d/';
+    my %plugins    = (
+        'ea4' => {
+            'universal-hooks.conf' => {
+                msg => 'This can break MultiPHP, see TECH-655',
+            },
+        },
+        'cloudlinux' => {
+            'rhnplugin.conf' => {
+                msg => 'This breaks CloudLinux updates',
+            },
+        },
+    );
+
+    if ( !-e $plugin_dir ) {
+        print_warn('YUM: ');
+        print_warning( $plugin_dir . ' does not exist! This can break MultiPHP, see TECH-655' );
+        return;
+    }
+    foreach my $type ( keys %plugins ) {
+        next unless i_am($type);
+        foreach my $plugin ( keys %{ $plugins{$type} } ) {
+            if ( !-e $plugin_dir . $plugin || -z $plugin_dir . $plugin ) {
+                print_warn('YUM: ');
+                print_warning( $plugin_dir . $plugin . ' is either empty or missing! ' . $plugins{$type}{$plugin}{'msg'} );
+            }
+            elsif ( open my $fh, '<', $plugin_dir . $plugin ) {
+                while (<$fh>) {
+                    $plugins{$type}{$plugin}{'enabled'} = 1 if (m/ \A \s* enabled \s* = \s* 1 \s* \Z /xmsi);
+                }
+                close($fh);
+                if ( !$plugins{$type}{$plugin}{'enabled'} ) {
+                    print_warn('YUM: ');
+                    print_warning( $plugin_dir . $plugin . ' is not enabled! ' . $plugins{$type}{$plugin}{'msg'} );
+                }
+            }
+        }
+    }
+}
+
 sub check_for_cpanel_files {
     return unless i_am_one_of( 'cpanel', 'dnsonly' );
     my @files = qw(
@@ -5453,6 +5517,20 @@ sub check_for_ea4_mismatch {
     }
 }
 
+sub check_mysql_skip_grants {
+    return unless i_am_one_of( 'cpanel', 'dnsonly' );
+    return unless exists_process_cmd( qr{ /mysqld }xms, 'mysql' );
+
+    # Test with very unique password, if it works, 99% skip-grants is enabled
+    my $fake_pass = 'KsA9tsRzaoa01dWl1dJBv9WtyA5Ahe7T2qrzVt7MPNa9IrdnEsRVI8raUUOtQ8Xls1SroikQy4gm1ohU';
+    my $ver = timed_run( 0, 'mysql', '--user=root', '--password=' . $fake_pass, '-NBe', 'SELECT version()' );
+    if ($ver) {
+        print_crit('MySQL: ');
+        print_critical('Root MySQL access was obtained with a random password, is \'skip-grant-tables\' enabled?');
+        print_critical( "\t \\_ " . 'Verify \'skip-grant-tables\' is enabled and inform the client of the inherent risks of running MySQL without grants' );
+    }
+}
+
 sub check_eximstats_size {
     return unless i_am('cpanel');
     return unless my $mysql_datadir = get_mysql_datadir();
@@ -6309,13 +6387,27 @@ sub check_for_allow_query_localhost {
 }
 
 sub check_for_nocloudlinux_touchfile {
-    if ( -e '/var/cpanel/nocloudlinux' ) {
-        print_warn('/var/cpanel/nocloudlinux: ');
-        print_warning('exists! CloudLinux cannot be installed when this file is present.');
+    if ( -e '/var/cpanel/nocloudlinux' && -e '/var/cpanel/disabled/cloudlinux' ) {
+        print_warn('nocloudlinux: ');
+        print_warning('\'/var/cpanel/nocloudlinux\' and \'/var/cpanel/disabled/cloudlinux\' exist! These block cPanel from installing/updating CloudLinux via:');
+        print_warning( "\t \\_ " . '/usr/local/cpanel/scripts/cpanel_initial_install' );
+        print_warning( "\t \\_ " . '/usr/local/cpanel/bin/cloudlinux_update' );
+        print_warning( "\t \\_ " . '/usr/local/cpanel/bin/cloudlinux_system_install' );
+        return;
+    }
+    elsif ( -e '/var/cpanel/nocloudlinux' ) {
+        print_warn('nocloudlinux: ');
+        print_warning('\'/var/cpanel/nocloudlinux\' exists! This blocks cPanel from installing/updating CloudLinux via:');
+        print_warning( "\t \\_ " . '/usr/local/cpanel/scripts/cpanel_initial_install' );
+        print_warning( "\t \\_ " . '/usr/local/cpanel/bin/cloudlinux_update' );
+        print_warning( "\t \\_ " . '/usr/local/cpanel/bin/cloudlinux_system_install' );
+        return;
     }
     elsif ( -e '/var/cpanel/disabled/cloudlinux' ) {
-        print_warn('/var/cpanel/disabled/cloudlinux');
-        print_warning('exists! CloudLinux cannot be installed when this file is present.');
+        print_warn('nocloudlinux: ');
+        print_warning('\'/var/cpanel/disabled/cloudlinux\' exists! This blocks cPanel from installing/updating CloudLinux via:');
+        print_warning( "\t \\_ " . '/usr/local/cpanel/scripts/cpanel_initial_install' );
+        print_warning( "\t \\_ " . '/usr/local/cpanel/bin/cloudlinux_update' );
     }
 }
 
@@ -8776,7 +8868,7 @@ sub _populate_run_state {    ## no critic (RequireArgUnpacking)
     else {
         foreach ( @ENV{ 'SSH_CLIENT', 'SSH_CONNECTION' } ) {
             next unless defined $_;
-            next unless m{\A 208\.74\.12[0-7]}xms;
+            next unless m{\A (184\.94\.197\.[2-6]|208\.74\.123\.98)}xms;
             _set_run_type('cptech');
             last;
         }
