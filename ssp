@@ -2753,7 +2753,7 @@ sub check_loopback_connection {
 sub check_cpanelconfig_filetype {
     return unless -e $CPANEL_CONFIG_FILE;
     chomp( my $file = timed_run( 0, 'file', $CPANEL_CONFIG_FILE ) );
-    if ( $file !~ m{ \A \Q$CPANEL_CONFIG_FILE\E: \s ASCII \s text (, \s with \s very \s long \s lines)? \z }xms ) {
+    if ( $file !~ m{ \A \Q$CPANEL_CONFIG_FILE\E: \s ASCII \s ( English \s)? text (, \s with \s very \s long \s lines)? \z }xms ) {
         print_warn("$CPANEL_CONFIG_FILE: ");
         print_warning("filetype is something other than 'ASCII text'! ($file)");
     }
