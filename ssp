@@ -8351,14 +8351,15 @@ sub check_for_ctls {
 
 sub check_for_xbash {
     return unless my $mysql_datadir = get_mysql_datadir();
+    return unless -d $mysql_datadir;
     opendir( my $dh, $mysql_datadir );
-    my $hit = grep { /PLEASE_READ_ME/ } readdir $dh;
+    my ($hit) = grep { /PLEASE_READ_ME/i } readdir $dh;
     closedir $dh;
 
     if ($hit) {
         print_generic_hack_predef('Xbash');
         print_critical("\tThe following files or directories were found:");
-        print_critical( "\t\t" . $mysql_datadir . 'PLEASE_READ_ME*' );
+        print_critical( "\t\t" . $mysql_datadir . $hit );
         print_critical("\t\tL3: See TECH-736");
     }
 }
