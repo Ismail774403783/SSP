@@ -7874,7 +7874,7 @@ sub check_for_libkeyutils_symbols {
 }
 
 sub check_for_libkeyutils_filenames {
-    my $bad_libs;
+    my ( $bad_libs, @list );
     my @dirs  = qw( /lib /lib64 );
     my @files = qw(
       libhdx.so
@@ -7897,10 +7897,18 @@ sub check_for_libkeyutils_filenames {
     for my $dir (@dirs) {
         next if !-e $dir;
         for my $file (@files) {
-            if ( -f "${dir}/${file}" and not -z "${dir}/${file}" ) {
+            if ( -f "${dir}/${file}" ) {
                 $bad_libs .= "\t${dir}/${file}\n";
             }
+            else {
+                push @list, "${dir}/${file}";
+            }
         }
+    }
+
+    my $bad_libs_ref = eximbin_stat( \@list );
+    foreach (@$bad_libs_ref) {
+        $bad_libs .= "\t$_ evading discovery via LD_PRELOAD\n";
     }
 
     if ($bad_libs) {
@@ -7909,6 +7917,18 @@ sub check_for_libkeyutils_filenames {
         print_critical($bad_libs);
         print_critical();
     }
+}
+
+sub eximbin_stat {
+    my ($aref) = @_;
+    my @exists;
+    my $eximbin = qw( /usr/sbin/exim );
+    my $statbin = qw( /usr/bin/stat );
+
+    foreach my $file (@$aref) {
+        push @exists, $file if ( grep { /File: \'$file\'/ } timed_run( 0, $eximbin, '-be', '\'${run {' . $statbin . ' ' . $file . '}}\'' ) );
+    }
+    return \@exists;
 }
 
 sub check_sha1_sigs_libkeyutils {
