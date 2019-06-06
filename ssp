@@ -446,6 +446,7 @@ sub run {
     # [CRIT] - Anything that requires a pre-defined response to be sent, escalation, or extreme care.
     check_for_unsupported_php();         # Extreme care!
     check_for_bash_secadv_20140924();    # advisory
+    check_for_exim_secadv_201910149();
     check_for_exim_cve_2018_6789();      # advisory
     all_malware_checks();
     check_for_openssl_heartbleed_bug();
@@ -498,6 +499,8 @@ sub csi_checks_only {
     check_for_openssl_heartbleed_bug();
     check_for_openssl_secadv_20140605();
     check_for_dovecot_secadv_20197524();
+    check_for_exim_secadv_201910149();
+    check_for_exim_cve_2018_6789();
     check_mysql_skip_grants();
     print_info2('SSP checks done.');
 }
@@ -7106,6 +7109,72 @@ sub check_for_apache_secadv_20190211 {
     print_critical();
 }
 
+sub check_for_exim_secadv_201910149 {
+    return unless i_am_one_of( 'cpanel', 'dnsonly' );
+    my ( $ver, $build_date );
+    my $changelog_href = get_rpm_changelog_href();
+    if ( $changelog_href->{exim}->{version} ) {
+        return if $changelog_href->{exim}->{'CVE-2019-10149'}->{seen};
+        $ver = $changelog_href->{exim}->{version};
+    }
+    else {
+        ( $ver, $build_date ) = get_exim_version_build_date();
+    }
+    return unless $ver;
+
+    # Only affects Exim 4.87 - 4.91
+    # tidyoff - greater readability here than what tidy wants
+    return unless ( $ver =~ /4\.(        # 4.XX
+                                 8[789]| # 4.87 - 4.89
+                                 9[01])  # 4.90 - 4.91
+                            /x
+                  );
+    # tidyon
+
+    print_critical();
+    print_crit('Exim ');
+    print_critical( 'may be vulnerable to CVE-2019-10149 (detected version ' . $ver . ')' );
+    print_critical("\t \\_ Send customer this premade: SECURITY - EXIM - CVE-2019-10149");
+}
+
+sub check_for_exim_cve_2018_6789 {
+    return unless i_am_one_of( 'cpanel', 'dnsonly' );
+    return unless my ( $ver, $print_date ) = get_exim_version_build_date();
+    return unless my ( $day, $month, $year ) = split( /-/, $print_date );
+    my $mon_num = _month_to_num($month);
+    return unless defined $mon_num;
+    return unless my $build_ts = timegm( 0, 0, 0, $day, $mon_num, $year );    # Treat as GMT for comparison
+
+    my $min_ts  = 1517961600;
+    my $min_ver = '4.90';
+    if ( cpanel_version_is( '<', '11.69' ) ) {
+        $min_ver = '4.89_1';
+    }
+
+    if ( version_compare( $ver, '<', $min_ver ) or version_compare( $build_ts, '<', $min_ts ) ) {
+        print_critical();
+        print_crit('Exim ');
+        print_critical( 'may be vulnerable to CVE-2018-6789 (detected version ' . $ver . ' built ' . $print_date . ')' );
+        print_critical("\t \\_ Send customer this premade: SECURITY - EXIM CVE-2018-6789 - DISCOVERY");
+        print_critical();
+    }
+}
+
+sub get_exim_version_build_date {
+    my $eximbin = '/usr/sbin/exim';
+    return unless -x $eximbin;
+    return unless my $exim_out = timed_run( 0, $eximbin, '--version' );
+
+    my $ver;
+    my $build_date;
+    if ( $exim_out =~ m{ version \s ([^\s]+) (?:\s \#\d+)? \s built \s ([^\s]+) }xms ) {
+        $ver        = $1;
+        $build_date = $2;
+    }
+    return unless $ver;
+    return ( $ver, $build_date );
+}
+
 sub check_for_broken_mysqldump {
     return if i_am('dnsonly');
     return unless -f '/usr/bin/mysql';
@@ -7123,39 +7192,6 @@ sub check_for_broken_mysqldump {
     if ( $exit_status != 1 ) {    # Running with no options is error 1
         print_warn("$md: ");
         print_warning('may be broken (exit status != 1).');
-    }
-}
-
-sub check_for_exim_cve_2018_6789 {
-    return unless i_am_one_of( 'cpanel', 'dnsonly' );
-    my $eximbin = '/usr/sbin/exim';
-    return unless -x $eximbin;
-    return unless my $exim_out = timed_run( 0, $eximbin, '--version' );
-
-    my $ver;
-    my $print_date;
-    if ( $exim_out =~ m{ version \s ([^\s]+) (?:\s \#\d+)? \s built \s ([^\s]+) }xms ) {
-        $ver        = $1;
-        $print_date = $2;
-    }
-    return unless $ver and $print_date;
-    return unless my ( $day, $month, $year ) = split( /-/, $print_date );
-    my $mon_num = _month_to_num($month);
-    return unless defined $mon_num;
-    return unless my $build_ts = timegm( 0, 0, 0, $day, $mon_num, $year );    # Treat as GMT for comparison
-
-    my $min_ts  = 1517961600;
-    my $min_ver = '4.90';
-    if ( cpanel_version_is( '<', '11.69' ) ) {
-        $min_ver = '4.89_1';
-    }
-
-    if ( version_compare( $ver, '<', $min_ver ) or version_compare( $build_ts, '<', $min_ts ) ) {
-        print_critical();
-        print_crit('Exim ');
-        print_critical( 'may be vulnerable to CVE-2018-6789 (detected version ' . $ver . ' built ' . $print_date . ')' );
-        print_critical('         \_ Send customer this premade: "SECURITY - EXIM CVE-2018-6789 - DISCOVERY"');
-        print_critical();
     }
 }
 
@@ -8416,6 +8452,16 @@ sub get_rpm_changelog_href {
         'ea-apache24' => {
             'CVE-2019-0211' => {
                 regex => qr{CVE-2019-0211:},
+                seen  => 0,
+            },
+        },
+        'exim' => {
+            'CVE-2019-10149' => {
+                regex => qr{CVE-2019-10149},
+                seen  => 0,
+            },
+            'CVE-2018-6789' => {
+                regex => qr{CVE-2018-6789},
                 seen  => 0,
             },
         },
