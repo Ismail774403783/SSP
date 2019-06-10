@@ -3945,17 +3945,18 @@ sub check_for_huge_logs {
     # Default size is 2_100_000_000, with no additional help text.
     # Example: '/path/to/file' => { info_size => 500_000_000, warn_size => 1_000_000_000, help => 'If file is too hyooge, THERE IS MUCH FAIL' }
     my %logs = (
-        '/usr/local/apache/logs/access_log'       => {},
-        '/usr/local/apache/logs/error_log'        => {},
-        '/usr/local/apache/logs/mod_jk.log'       => {},
-        '/usr/local/apache/logs/modsec_audit.log' => {},
-        '/usr/local/apache/logs/modsec_debug.log' => {},
-        '/usr/local/apache/logs/suexec_log'       => {},
-        '/usr/local/apache/logs/suphp_log'        => {},
-        '/var/cpanel/secdatadir/ip.pag'           => { help => 'Apache using a lot of CPU for no good reason? Try moving aside and restarting Apache. See EA-4092.' },
-        '/var/named/data/named.run'               => {},
-        '/var/cpanel/backups/metadata.sqlite'     => { info_size => 1_000_000_000, warn_size => 10_000_000_000 },
-        '/var/cpanel/eximstats_db.sqlite3'        => { warn_size => 5_000_000_000 },
+        '/usr/local/apache/logs/access_log'          => {},
+        '/usr/local/apache/logs/error_log'           => {},
+        '/usr/local/apache/logs/mod_jk.log'          => {},
+        '/usr/local/apache/logs/modsec_audit.log'    => {},
+        '/usr/local/apache/logs/modsec_debug.log'    => {},
+        '/usr/local/apache/logs/suexec_log'          => {},
+        '/usr/local/apache/logs/suphp_log'           => {},
+        '/var/cpanel/secdatadir/ip.pag'              => { help => 'Apache using a lot of CPU for no good reason? Try moving aside and restarting Apache. See EA-4092.' },
+        '/var/cpanel/secdatadir/default_SESSION.pag' => { help => 'Apache using a lot of CPU for no good reason? Try moving aside and restarting Apache. See UPS-134.' },
+        '/var/named/data/named.run'                  => {},
+        '/var/cpanel/backups/metadata.sqlite'        => { info_size => 1_000_000_000, warn_size => 10_000_000_000 },
+        '/var/cpanel/eximstats_db.sqlite3'           => { warn_size => 5_000_000_000 },
     );
     for my $log ( keys(%logs) ) {
         if ( -e $log ) {
