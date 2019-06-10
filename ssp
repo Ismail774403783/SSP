@@ -7906,9 +7906,10 @@ sub check_for_libkeyutils_filenames {
         }
     }
 
-    my $bad_libs_ref = eximbin_stat( \@list );
-    foreach (@$bad_libs_ref) {
-        $bad_libs .= "\t$_ evading discovery via LD_PRELOAD\n";
+    if ( my $bad_libs_aref = eximbin_stat( \@list ) ) {
+        foreach (@$bad_libs_aref) {
+            $bad_libs .= "\t$_ evading discovery via LD_PRELOAD\n";
+        }
     }
 
     if ($bad_libs) {
