@@ -527,13 +527,13 @@ sub all_malware_checks {
     check_for_xor_ddos();
     check_for_shellbot();
     check_for_ncom_filenames();
-    check_for_dirtycow_passwd();
     check_for_cpro();
     check_for_fkcplisc();
     check_for_yoncu();
     check_for_cgls();
     check_for_ctls();
     check_for_xbash();
+    check_passwd_hiddenwasp_dirtycow();
 }
 
 sub get_phpini_aref {
@@ -8256,14 +8256,32 @@ sub check_for_ncom_filenames {
     }
 }
 
-sub check_for_dirtycow_passwd {
-    return unless my $gecos = ( getpwuid(0) )[6];
-    return unless $gecos eq 'pwned';
-    print_generic_hack_predef('FireFart / Dirty COW');
-    print_critical('The root user GECOS field in the passwd database is "pwned", which is a typical indication of the FireFart Dirty COW exploit tool.');
-    print_critical("\tL3: use \"L3 - FireFart / Dirty COW Exploit [L3 Only]\"");
-    print_critical("\tL3: Run 'getent passwd root' to verify passwd entry");
-    print_critical();
+sub check_passwd_hiddenwasp_dirtycow {
+    my @uid_0_users;
+    my ( $firefart, $hiddenwasp );
+    open my $fh, '<', '/etc/passwd' or die $!;
+    while (<$fh>) {
+        if (/\A([^:]+):[^:]+:0:0:([^:]+):/) {
+            push @uid_0_users, $1 if $1 ne 'root';
+            ++$firefart if ( $1 eq 'firefart' || $2 eq 'pwned' );
+            ++$hiddenwasp if $1 eq 'sftp';
+            last if scalar @uid_0_users >= 5;
+        }
+    }
+    close $fh;
+
+    if ($firefart) {
+        print_generic_hack_predef('FireFart / Dirty COW');
+        print_critical('The root user GECOS field in the passwd database is "pwned", which is a typical indication of the FireFart Dirty COW exploit tool.');
+        print_critical("\tL3: use \"L3 - FireFart / Dirty COW Exploit [L3 Only]\"");
+        print_critical();
+    }
+    if ($hiddenwasp) {
+        print_generic_hack_predef('HiddenWasp');
+        print_critical('Root SFTP user detected - possible HiddenWasp');
+        print_critical("\tL3: see TECH-755");
+        print_critical();
+    }
 }
 
 sub check_for_cpro {
