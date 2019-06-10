@@ -5816,6 +5816,10 @@ sub check_for_custom_repos {
             msg   => ' see TECH-716',
             regex => qr{ \A city-fan.org\.repo }x,
         },
+        'Jperkster' => {
+            msg   => ' see UPS-136',
+            regex => qr {\A EA4-freetds.repo }x,
+        },
     );
 
     return if !-d $yum_repos_dir;
