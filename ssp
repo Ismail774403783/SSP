@@ -7142,8 +7142,10 @@ sub check_for_exim_secadv_201910149 {
     print_critical('The following check was used: rpm -q --changelog exim | grep \'CVE-2019-10149\'');
     print_critical('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
     print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
-    print_critical("\t \\_ Send customer this premade: SECURITY - EXIM - CVE-2019-10149");
-    print_critical("\t \\_ Tag case CPANEL-25561") if i_am('cptech');
+    if ( i_am('cptech') ) {
+        print_critical("\t \\_ Send customer this premade: SECURITY - EXIM - CVE-2019-10149");
+        print_critical("\t \\_ Tag case CPANEL-27723");
+    }
 }
 
 sub check_for_exim_cve_2018_6789 {
