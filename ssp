@@ -7144,7 +7144,7 @@ sub check_for_exim_secadv_201910149 {
     print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
     if ( i_am('cptech') ) {
         print_critical("\t \\_ Send customer this premade: SECURITY - EXIM - CVE-2019-10149");
-        print_critical("\t \\_ Tag case CPANEL-27832");
+        print_critical("\t \\_ Tag case CPANEL-27832 if root compromised");
     }
 }
 
