@@ -8320,9 +8320,9 @@ sub check_for_malicious_root_cron {
 
     if (%warning) {
         for my $cron ( keys(%warning) ) {
-            print_crit("cron: ");
-            print_critical( 'Potentially malicious root cronjob: ' . $cron . " contains [ " . join( ' ', sort( keys( %{ $warning{$cron} } ) ) ) . " ]" );
-            print_critical("\t \\_ Please have an L3 confirm before continuing");
+            print_crit("Potentially malicious root cronjob: ");
+            print_critical('Escalate to L3 to before proceeding');
+            print_critical( "\t \\_ " . $cron . " contains [ " . join( ' ', sort( keys( %{ $warning{$cron} } ) ) ) . " ]" );
         }
     }
 }
