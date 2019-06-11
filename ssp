@@ -534,6 +534,7 @@ sub all_malware_checks {
     check_for_ctls();
     check_for_xbash();
     check_passwd_hiddenwasp_dirtycow();
+    check_for_spoofed_kernel_modules();
 }
 
 sub get_phpini_aref {
@@ -8288,6 +8289,29 @@ sub check_passwd_hiddenwasp_dirtycow {
         print_critical('Root SFTP user detected - possible HiddenWasp');
         print_critical("\tL3: see TECH-755");
         print_critical();
+    }
+}
+
+sub check_for_spoofed_kernel_modules {
+    my @dirs = qw(
+      /usr/local/sbin
+      /usr/local/bin
+      /sbin
+      /bin
+      /usr/sbin
+      /usr/bin
+    );
+
+    my @files;
+    foreach my $dir (@dirs) {
+        ( -d $dir && !-l $dir ) ? push @files, glob("$dir/[*") : next;
+    }
+
+    my (@spoofs) = grep { !/(\/usr\/)?\/bin\/\[$/m } @files;
+    if (@spoofs) {
+        print_crit('Suspicious command in $PATH: ');
+        print_critical('Escalate to L3 to confirm their validity before proceeding(see TECH-762)');
+        print_critical( join "\n", map { "\t \\_ $_" } @spoofs );
     }
 }
 
