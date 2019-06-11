@@ -535,6 +535,7 @@ sub all_malware_checks {
     check_for_xbash();
     check_passwd_hiddenwasp_dirtycow();
     check_for_malicious_root_cron();
+    check_for_spoofed_kernel_modules();
 }
 
 sub get_phpini_aref {
@@ -8323,6 +8324,29 @@ sub check_for_malicious_root_cron {
             print_critical( 'Potentially malicious root cronjob: ' . $cron . " contains [ " . join( ' ', sort( keys( %{ $warning{$cron} } ) ) ) . " ]" );
             print_critical("\t \\_ Please have an L3 confirm before continuing");
         }
+    }
+}
+
+sub check_for_spoofed_kernel_modules {
+    my @dirs = qw(
+      /usr/local/sbin
+      /usr/local/bin
+      /sbin
+      /bin
+      /usr/sbin
+      /usr/bin
+    );
+
+    my @files;
+    foreach my $dir (@dirs) {
+        ( -d $dir && !-l $dir ) ? push @files, glob("$dir/[*") : next;
+    }
+
+    my (@spoofs) = grep { !/(\/usr\/)?\/bin\/\[$/m } @files;
+    if (@spoofs) {
+        print_crit('Suspicious command in $PATH: ');
+        print_critical('Escalate to L3 to confirm their validity before proceeding(see TECH-762)');
+        print_critical( join "\n", map { "\t \\_ $_" } @spoofs );
     }
 }
 
