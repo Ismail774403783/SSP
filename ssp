@@ -8345,7 +8345,7 @@ sub check_for_spoofed_kernel_modules {
 
     my (@spoofs) = grep { !/(\/usr\/)?\/bin\/\[$/m } @files;
     if (@spoofs) {
-        print_crit('Suspicious command in $PATH: ');
+        print_crit('Suspicious file found: ');
         print_critical('Escalate to L3 to confirm their validity before proceeding(see TECH-762)');
         print_critical( join "\n", map { "\t \\_ $_" } @spoofs );
     }
