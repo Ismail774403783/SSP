@@ -4648,11 +4648,11 @@ sub get_cron_files {
     my @crons;
     my @cronlist = glob(
         q{
-        /etc/cron.d/*
-        /etc/cron.hourly/*
-        /etc/cron.daily/*
-        /etc/cron.weekly/*
-        /etc/cron.monthly/*
+        /etc/cron.d/{.,}*
+        /etc/cron.hourly/{.,}*
+        /etc/cron.daily/{.,}*
+        /etc/cron.weekly/{.,}*
+        /etc/cron.monthly/{.,}*
         /etc/crontab
         /var/spool/cron/root
     }
