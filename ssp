@@ -34,7 +34,7 @@ use Cwd qw(abs_path);
 use Getopt::Long();
 
 # Application version (The project maintainer will bump this, don't modify it.)
-our $VERSION = '4.99.207';
+our $VERSION = '4.99.208';
 
 # Global variables that alter application runtime
 our $OPT_SKIP_NETWORKING;    # Disable network calls
@@ -534,6 +534,8 @@ sub all_malware_checks {
     check_for_ctls();
     check_for_xbash();
     check_passwd_hiddenwasp_dirtycow();
+    check_for_malicious_root_cron();
+    check_for_spoofed_kernel_modules();
 }
 
 sub get_phpini_aref {
@@ -4642,14 +4644,16 @@ sub check_bash_history_for_certain_commands {
     }
 }
 
-sub check_roots_cron_for_certain_commands {
+sub get_cron_files {
+    my @crons;
     my @cronlist = glob(
         q{
-        /etc/cron.d/*
-        /etc/cron.hourly/*
-        /etc/cron.daily/*
-        /etc/cron.weekly/*
-        /etc/cron.monthly/*
+        /etc/cron.d/{.,}*
+        /etc/cron.hourly/{.,}*
+        /etc/cron.daily/{.,}*
+        /etc/cron.weekly/{.,}*
+        /etc/cron.monthly/{.,}*
+        /etc/crontab
         /var/spool/cron/root
     }
     );
@@ -4664,11 +4668,23 @@ sub check_roots_cron_for_certain_commands {
         'f392372e36f56fb3e70e850a6bd1a550' => '/etc/cron.d/lvedbgovernor-utils-cron',    # standard CloudLinux script
     );
 
-    my %critical_found = ();
-    my %found          = ();
-
     for my $cron (@cronlist) {
         next if !( -f $cron || -l $cron );
+        chomp( my $checksum = timed_run( 0, 'md5sum', $cron ) );
+        $checksum =~ s/\s.*//g;
+        next if ( $checksum && $cron_ignore{$checksum} );
+        push @crons, $cron;
+    }
+
+    return \@crons;
+}
+
+sub check_roots_cron_for_certain_commands {
+    my %missing = ();
+    my %warning = ();
+    return unless my $crons_aref = get_cron_files();
+
+    for my $cron (@$crons_aref) {
         next
           if (
             $cron =~ m{ /(
@@ -4682,35 +4698,32 @@ sub check_roots_cron_for_certain_commands {
             rpm
             ) $ }x
           );    # Common false-positives to filter out entirely.
-        chomp( my $checksum = timed_run( 0, 'md5sum', $cron ) );
-        $checksum =~ s/\s.*//g;
-        next if ( $checksum && $cron_ignore{$checksum} );
         if ( open my $cron_fh, '<', $cron ) {
             while (<$cron_fh>) {
                 if (m{ \A [^#]+ /usr/local/cpanel/(bin/backup|scripts/upcp) \s }xms) {
-                    $critical_found{$1} = 1;
+                    $missing{$1} = 1;
                 }
                 if (m{ \A [^#]* (?:^|\s|\/)(rm|unlink|ch(?:mod|own|attr)|(?:p|s)?kill(?:all)?5?|tmpwatch|cpkeyclt)\s }x) {
-                    $found{$cron}{$1} = 1;
+                    $warning{$cron}{$1} = 1;
                 }
             }
             close $cron_fh;
         }
     }
 
-    if ( !exists $critical_found{'bin/backup'} ) {
+    if ( !exists $missing{'bin/backup'} ) {
         print_warn("cron: ");
         print_warning("cPanel backup cron is missing (/usr/local/cpanel/bin/backup)");
     }
-    if ( !exists $critical_found{'scripts/upcp'} ) {
+    if ( !exists $missing{'scripts/upcp'} ) {
         print_warn("cron: ");
         print_warning("cPanel update cron is missing (/usr/local/cpanel/scripts/upcp)");
     }
 
-    if (%found) {
-        for my $cron ( keys(%found) ) {
+    if (%warning) {
+        for my $cron ( keys(%warning) ) {
             print_warn("cron: ");
-            print_warning( $cron . " contains [ " . join( ' ', sort( keys( %{ $found{$cron} } ) ) ) . " ]" );
+            print_warning( $cron . " contains [ " . join( ' ', sort( keys( %{ $warning{$cron} } ) ) ) . " ]" );
         }
     }
 }
@@ -8288,6 +8301,53 @@ sub check_passwd_hiddenwasp_dirtycow {
         print_critical('Root SFTP user detected - possible HiddenWasp');
         print_critical("\tL3: see TECH-755");
         print_critical();
+    }
+}
+
+sub check_for_malicious_root_cron {
+    my %warning = ();
+    return unless my $crons_aref = get_cron_files();
+
+    for my $cron (@$crons_aref) {
+        if ( open my $cron_fh, '<', $cron ) {
+            while (<$cron_fh>) {
+                if (m{ \A [^#]* (tor2web|\.onion\.|pastebin) }x) {
+                    $warning{$cron}{$1} = 1;
+                }
+            }
+            close $cron_fh;
+        }
+    }
+
+    if (%warning) {
+        print_crit("Potentially malicious root cronjob: ");
+        print_critical('Escalate to L3 to before proceeding');
+        for my $cron ( keys(%warning) ) {
+            print_critical( "\t \\_ " . $cron . " contains [ " . join( ' ', sort( keys( %{ $warning{$cron} } ) ) ) . " ]" );
+        }
+    }
+}
+
+sub check_for_spoofed_kernel_modules {
+    my @dirs = qw(
+      /usr/local/sbin
+      /usr/local/bin
+      /sbin
+      /bin
+      /usr/sbin
+      /usr/bin
+    );
+
+    my @files;
+    foreach my $dir (@dirs) {
+        ( -d $dir && !-l $dir ) ? push @files, glob("$dir/[*") : next;
+    }
+
+    my (@spoofs) = grep { !/(\/usr\/)?\/bin\/\[$/m } @files;
+    if (@spoofs) {
+        print_crit('Suspicious file found: ');
+        print_critical('Escalate to L3 to confirm their validity before proceeding(see TECH-762)');
+        print_critical( join "\n", map { "\t \\_ $_" } @spoofs );
     }
 }
 
