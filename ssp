@@ -2860,6 +2860,7 @@ sub check_for_local_templates {
       /var/cpanel/templates/apache1_3
       /var/cpanel/templates/apache1
       /var/cpanel/templates/dovecot2.2
+      /var/cpanel/templates/dovecot2.3
       /var/cpanel/templates/dovecotSNI
       );    # Order is somewhat important above for cosmetic reasons, due to symlinks
     my %templatedirs = ();
