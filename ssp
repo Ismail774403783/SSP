@@ -3282,7 +3282,7 @@ sub check_for_non_default_permissions {
         '/etc/shadow'         => { mode => [ '0600', '0400', '0200', '0000' ] },
         '/etc/ssh/sshd_config'          => { mode => ['0600'], attr_check => [ 'IMMUTABLE' ] },
         '/opt'                => { mode => ['0755'] },
-        '/proc'               => { mode => ['0555'], perms_help => 'If users cannot read /proc/mounts it can break cPanel quota reporting.' },
+        '/proc'               => { mode => ['0555'], perms_help => 'Breaks quotas if we cannot read /proc/mounts, prevents setrtlimit(), is the server LXC/proxmox? See TECH-775' },
         '/root/.ssh/authorized_keys'    => { mode => ['0600'], attr_check => [ 'IMMUTABLE' ] },
         '/sbin/ifconfig'      => { mode => [ '0755', '0555' ] },
         '/tmp'                => { mode => ['1777'] },
