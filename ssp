@@ -3269,7 +3269,7 @@ sub check_for_non_default_permissions {
         '/etc/passwd'         => { mode => ['0644'] },
         '/etc/shadow'         => { mode => [ '0600', '0400', '0200', '0000' ] },
         '/opt'                => { mode => ['0755'] },
-        '/proc'               => { mode => ['0555'], perms_help => 'If users cannot read /proc/mounts it can break cPanel quota reporting.' },
+        '/proc'               => { mode => ['0555'], perms_help => 'Breaks quotas if we cannot read /proc/mounts, prevents setrtlimit(), is the server LXC/proxmox? See TECH-775' },
         '/sbin/ifconfig'      => { mode => [ '0755', '0555' ] },
         '/tmp'                => { mode => ['1777'] },
         '/usr'                => { mode => ['0755'] },
