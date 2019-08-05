@@ -536,6 +536,7 @@ sub all_malware_checks {
     check_passwd_hiddenwasp_dirtycow();
     check_for_malicious_root_cron();
     check_for_spoofed_kernel_modules();
+    check_for_bad_perms_auth_keys();
 }
 
 sub get_phpini_aref {
@@ -8348,6 +8349,21 @@ sub check_for_spoofed_kernel_modules {
         print_crit('Suspicious file found: ');
         print_critical('Escalate to L3 to confirm their validity before proceeding(see TECH-762)');
         print_critical( join "\n", map { "\t \\_ $_" } @spoofs );
+    }
+}
+
+sub check_for_bad_perms_auth_keys {
+    my $checkmode = '0600';
+    my $path      = '/root/.ssh/authorized_keys';
+    return unless my ( $uid, $gid ) = ( lstat($path) )[ 4, 5 ];
+    my $user = getpwuid($uid);
+    $user = $user || $uid;
+    my $group = getgrgid($gid);
+    $group = $group || $gid;
+
+    if ( !( $user eq 'root' ) || !( $group eq 'root' ) ) {
+        print_generic_hack_predef('Potential Root Compromise');
+        print_critical( 'Non-default Perms: ' . $path . ' [owner ' . $user . ':' . $group . '] (default root:root)' );
     }
 }
 
