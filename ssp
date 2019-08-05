@@ -290,6 +290,7 @@ sub run {
     check_for_tomcatoptions();
     check_for_sneaky_htaccess();
     check_ea4_paths_conf();
+    check_ea4_missing_cl_repo();
     check_apache_modules();
     check_apache_niceness();
     check_perl_sanity();
@@ -3087,6 +3088,15 @@ sub check_ea4_paths_conf {
             print_warning( '/etc/cpanel/ea4/paths.conf contains ' . $unknown_count . ' unknown configuration setting(s)!' );
         }
     }
+}
+
+sub check_ea4_missing_cl_repo {
+    return unless i_am( 'cloudlinux', 'ea4' );
+    my $clea4repo = '/etc/yum.repos.d/cloudlinux-ea4.repo';
+    return if -f $clea4repo;
+
+    print_warn('Missing Repo: ');
+    print_warning( $clea4repo . ' - This can break EA4, see TECH-764.' );
 }
 
 sub check_apache_modules {
