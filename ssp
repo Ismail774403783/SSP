@@ -273,6 +273,7 @@ sub run {
     check_var_cpanel_users();
     check_port_hash();
     check_runlevel();
+    check_multiuser_target();
     check_for_missing_root_cron();
     check_for_missing_usr_bin_crontab();
     check_if_upcp_is_running();
@@ -2641,6 +2642,21 @@ sub check_runlevel {
             print_warn('Runlevel: ');
             print_warning("runlevel is not 3 (current runlevel: $runlevel)");
         }
+    }
+}
+
+sub check_multiuser_target {
+    return unless os_version_is(qw( >= 7 ));
+    my $warn;
+    chomp( my $target = timed_run( 0, 'systemctl', 'get-default' ) );
+    chomp( my $active = timed_run( 0, 'systemctl', 'is-active', 'multi-user.target' ) );
+
+    $warn .= ' [current ' . $target . '] (default multi-user.target)' if ( $target ne 'multi-user.target' );
+    $warn .= ' [current ' . $active . '] (default active)'            if ( $active ne 'active' );
+
+    if ($warn) {
+        print_warn('Boot Target:');
+        print_warning( $warn . ' This can prevent tailwatchd from starting, see TECH-362' );
     }
 }
 
