@@ -421,6 +421,7 @@ sub run {
     check_for_puppet_agent();
     check_imunify360_running();
     check_for_etc_ubic_dir();
+    check_for_acls_cpconf();
 
     # [3RDP]
     check_smtp_processes();
@@ -5737,6 +5738,15 @@ sub check_for_etc_ubic_dir {
     if ( -e '/etc/ubic' ) {
         print_warn('/etc/ubic: ');
         print_warning('exists! This directory will cause ea-tomcat85 to fail when adding new users, see TECH-707');
+    }
+}
+
+sub check_for_acls_cpconf {
+    return unless i_am('cpanel');
+    return unless defined $CPCONF{'acls'};
+    if ( $CPCONF{'acls'} ) {
+        print_warn('Permissions: ');
+        print_warning('"acls" Tweak Setting enabled. This affects homedir, docroot, and htpasswd, see TECH-751');
     }
 }
 
