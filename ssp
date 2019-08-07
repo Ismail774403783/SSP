@@ -1525,27 +1525,21 @@ sub print_cpanel_info {
     print_info('cPanel Info: ');
     print_normal($output);
 
-    my %eol = (
-        '56' => { expires => 0, text => 'October 31, 2017' },
-        '58' => { expires => 0, text => 'July 31, 2017' },
-        '60' => { expires => 0, text => 'October 31, 2017' },
-        '62' => { expires => 0, text => 'June 30, 2018' },
-        '64' => { expires => 0, text => 'September 21, 2017' },
-        '66' => { expires => 0, text => 'December 4, 2017' },
-        '68' => { expires => 0, text => 'June 6, 2018' },
-        '72' => { expires => 0, text => 'September 4, 2018' },
-    );
-
+    # Check for expired version
     my ( $parent_ver, $major_ver ) = split( /\./, _get_run_var('cpanel_numeric_version'), 3 );
     my $expire_info;
     if ( defined $parent_ver and defined $major_ver ) {
         $major_ver++ if $major_ver % 2;    # Bump odd dev versions
-        $expire_info = 'has expired.' if $major_ver <= 54;
-        my $found_tiers_aref = get_tiers_for_version_aref( $parent_ver . '.' . $major_ver );
-        if ( defined $found_tiers_aref and scalar @{$found_tiers_aref} == 0 ) {
-            $expire_info = 'has expired (version is not a named or LTS tier in TIERS.json)';
+        $expire_info = 'has expired.' if $major_ver < 62;    # TIERS.json file only contains 62+
+        return unless my $version_href = get_tier_info_for_version_href( $parent_ver . '.' . $major_ver );
+        $expire_info = 'has expired (version is not a named or LTS tier in TIERS.json)' if ( !keys %{$version_href} );
+        if ( exists $version_href->{'expires'} && $version_href->{'expires'} =~ /\A \d+ \Z/xms ) {
+            my @months = ( 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec' );
+            if ( $version_href->{'expires'} <= time() ) {
+                my ( $day, $month, $year ) = ( localtime( $version_href->{'expires'} ) )[ 3, 4, 5 ];
+                $expire_info = 'ended on ' . $months[$month] . " " . $day . ", " . ( $year + 1900 );
+            }
         }
-        $expire_info = 'ended on ' . $eol{$major_ver}->{'text'} . '.' if exists $eol{$major_ver} && $eol{$major_ver}->{'expires'} <= time();
     }
     if ($expire_info) {
         print_crit('cPanel Info: ');
@@ -8968,7 +8962,7 @@ sub get_tiers_json_href {
     return $href;
 }
 
-sub get_tiers_for_version_aref {
+sub get_tier_info_for_version_href {
     my ($version) = @_;
     return unless my $tiers_ref = get_tiers_json_href();
     my ( $parent_ver, $major_ver ) = split( /\./, $version, 3 );
@@ -8978,22 +8972,14 @@ sub get_tiers_for_version_aref {
     $major_ver++ if $major_ver % 2;    # Bump odd dev versions
     my $full_ver = join( '.', $parent_ver, $major_ver );
 
-    if ( exists $tiers_ref->{'tiers'}->{$full_ver} ) {
-        for my $tier ( @{ $tiers_ref->{'tiers'}->{$full_ver} } ) {
-            if ( exists $tier->{'is_lts'} and $tier->{'is_lts'} ) {
-                push @found_tiers, $full_ver . ' LTS';
-            }
-            if ( exists $tier->{'named'} ) {
-                for my $named_tier ( @{ $tier->{'named'} } ) {
-                    push @found_tiers, $named_tier;
-                }
-            }
-        }
+    if ( exists $tiers_ref->{'tiers'}->{$full_ver} and exists $tiers_ref->{'tiers'}->{$full_ver}->[0] ) {
+        return $tiers_ref->{'tiers'}->{$full_ver}->[0];
     }
-    return \@found_tiers;
+
+    return;
 }
 
-sub _populate_run_state {    ## no critic (RequireArgUnpacking)
+sub _populate_run_state {              ## no critic (RequireArgUnpacking)
     return unless _init_run_state();
     _set_run_type('kernelcare') if -x '/usr/bin/kcarectl';
 
