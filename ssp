@@ -421,6 +421,7 @@ sub run {
     check_for_puppet_agent();
     check_imunify360_running();
     check_for_etc_ubic_dir();
+    check_for_port_53_dnsmasq();
 
     # [3RDP]
     check_smtp_processes();
@@ -5737,6 +5738,18 @@ sub check_for_etc_ubic_dir {
     if ( -e '/etc/ubic' ) {
         print_warn('/etc/ubic: ');
         print_warning('exists! This directory will cause ea-tomcat85 to fail when adding new users, see TECH-707');
+    }
+}
+
+sub check_for_port_53_dnsmasq {
+    return unless my $ports = get_lsof_port_href();
+    return unless exists $ports->{'53'};
+    for my $ref ( @{ $ports->{'53'} } ) {
+        if ( $ref->{'CMD'} =~ m{ \A dnsmasq }xms ) {
+            print_warn('Dnsmasq: ');
+            print_warning('listening on port 53, known to cause issues with AutoSSL, see TECH-718');
+            last;
+        }
     }
 }
 
