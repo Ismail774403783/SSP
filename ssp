@@ -34,7 +34,7 @@ use Cwd qw(abs_path);
 use Getopt::Long();
 
 # Application version (The project maintainer will bump this, don't modify it.)
-our $VERSION = '4.99.208';
+our $VERSION = '4.99.209';
 
 # Global variables that alter application runtime
 our $OPT_SKIP_NETWORKING;    # Disable network calls
@@ -273,6 +273,7 @@ sub run {
     check_var_cpanel_users();
     check_port_hash();
     check_runlevel();
+    check_multiuser_target();
     check_for_missing_root_cron();
     check_for_missing_usr_bin_crontab();
     check_if_upcp_is_running();
@@ -290,6 +291,7 @@ sub run {
     check_for_tomcatoptions();
     check_for_sneaky_htaccess();
     check_ea4_paths_conf();
+    check_ea4_missing_cl_repo();
     check_apache_modules();
     check_apache_niceness();
     check_perl_sanity();
@@ -421,6 +423,8 @@ sub run {
     check_for_puppet_agent();
     check_imunify360_running();
     check_for_etc_ubic_dir();
+    check_for_acls_cpconf();
+    check_for_port_53_dnsmasq();
 
     # [3RDP]
     check_smtp_processes();
@@ -536,6 +540,7 @@ sub all_malware_checks {
     check_passwd_hiddenwasp_dirtycow();
     check_for_malicious_root_cron();
     check_for_spoofed_kernel_modules();
+    check_for_bad_perms_auth_keys();
 }
 
 sub get_phpini_aref {
@@ -1525,27 +1530,21 @@ sub print_cpanel_info {
     print_info('cPanel Info: ');
     print_normal($output);
 
-    my %eol = (
-        '56' => { expires => 0, text => 'October 31, 2017' },
-        '58' => { expires => 0, text => 'July 31, 2017' },
-        '60' => { expires => 0, text => 'October 31, 2017' },
-        '62' => { expires => 0, text => 'June 30, 2018' },
-        '64' => { expires => 0, text => 'September 21, 2017' },
-        '66' => { expires => 0, text => 'December 4, 2017' },
-        '68' => { expires => 0, text => 'June 6, 2018' },
-        '72' => { expires => 0, text => 'September 4, 2018' },
-    );
-
+    # Check for expired version
     my ( $parent_ver, $major_ver ) = split( /\./, _get_run_var('cpanel_numeric_version'), 3 );
     my $expire_info;
     if ( defined $parent_ver and defined $major_ver ) {
         $major_ver++ if $major_ver % 2;    # Bump odd dev versions
-        $expire_info = 'has expired.' if $major_ver <= 54;
-        my $found_tiers_aref = get_tiers_for_version_aref( $parent_ver . '.' . $major_ver );
-        if ( defined $found_tiers_aref and scalar @{$found_tiers_aref} == 0 ) {
-            $expire_info = 'has expired (version is not a named or LTS tier in TIERS.json)';
+        $expire_info = 'has expired.' if $major_ver < 62;    # TIERS.json file only contains 62+
+        return unless my $version_href = get_tier_info_for_version_href( $parent_ver . '.' . $major_ver );
+        $expire_info = 'has expired (version is not a named or LTS tier in TIERS.json)' if ( !keys %{$version_href} );
+        if ( exists $version_href->{'expires'} && $version_href->{'expires'} =~ /\A \d+ \Z/xms ) {
+            my @months = ( 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec' );
+            if ( $version_href->{'expires'} <= time() ) {
+                my ( $day, $month, $year ) = ( localtime( $version_href->{'expires'} ) )[ 3, 4, 5 ];
+                $expire_info = 'ended on ' . $months[$month] . " " . $day . ", " . ( $year + 1900 );
+            }
         }
-        $expire_info = 'ended on ' . $eol{$major_ver}->{'text'} . '.' if exists $eol{$major_ver} && $eol{$major_ver}->{'expires'} <= time();
     }
     if ($expire_info) {
         print_crit('cPanel Info: ');
@@ -2642,6 +2641,21 @@ sub check_runlevel {
     }
 }
 
+sub check_multiuser_target {
+    return unless os_version_is(qw( >= 7 ));
+    my $warn;
+    chomp( my $target = timed_run( 0, 'systemctl', 'get-default' ) );
+    chomp( my $active = timed_run( 0, 'systemctl', 'is-active', 'multi-user.target' ) );
+
+    $warn .= ' [current ' . $target . '] (default multi-user.target)' if ( $target ne 'multi-user.target' );
+    $warn .= ' [current ' . $active . '] (default active)'            if ( $active ne 'active' );
+
+    if ($warn) {
+        print_warn('Boot Target:');
+        print_warning( $warn . ' This can prevent tailwatchd from starting, see TECH-362' );
+    }
+}
+
 sub check_for_missing_root_cron {
     return unless i_am_one_of( 'cpanel', 'dnsonly' );
     my $cron = '/var/spool/cron/root';
@@ -2860,6 +2874,7 @@ sub check_for_local_templates {
       /var/cpanel/templates/apache1_3
       /var/cpanel/templates/apache1
       /var/cpanel/templates/dovecot2.2
+      /var/cpanel/templates/dovecot2.3
       /var/cpanel/templates/dovecotSNI
       );    # Order is somewhat important above for cosmetic reasons, due to symlinks
     my %templatedirs = ();
@@ -3087,6 +3102,15 @@ sub check_ea4_paths_conf {
     }
 }
 
+sub check_ea4_missing_cl_repo {
+    return unless i_am( 'cloudlinux', 'ea4' );
+    my $clea4repo = '/etc/yum.repos.d/cloudlinux-ea4.repo';
+    return if -f $clea4repo;
+
+    print_warn('Missing Repo: ');
+    print_warning( $clea4repo . ' - This can break EA4, see TECH-764.' );
+}
+
 sub check_apache_modules {
     return unless i_am('cpanel');
     my $installed_modules = get_apache_modules_href();
@@ -3268,8 +3292,10 @@ sub check_for_non_default_permissions {
         '/etc/nsswitch.conf'  => { mode => ['0644'] },
         '/etc/passwd'         => { mode => ['0644'] },
         '/etc/shadow'         => { mode => [ '0600', '0400', '0200', '0000' ] },
+        '/etc/ssh/sshd_config'          => { mode => ['0600'], attr_check => [ 'IMMUTABLE' ] },
         '/opt'                => { mode => ['0755'] },
-        '/proc'               => { mode => ['0555'], perms_help => 'If users cannot read /proc/mounts it can break cPanel quota reporting.' },
+        '/proc'               => { mode => ['0555'], perms_help => 'Breaks quotas if we cannot read /proc/mounts, prevents setrtlimit(), is the server LXC/proxmox? See TECH-775' },
+        '/root/.ssh/authorized_keys'    => { mode => ['0600'], attr_check => [ 'IMMUTABLE' ] },
         '/sbin/ifconfig'      => { mode => [ '0755', '0555' ] },
         '/tmp'                => { mode => ['1777'] },
         '/usr'                => { mode => ['0755'] },
@@ -5151,8 +5177,10 @@ sub check_for_hooks_from_var_cpanel_hooks_yaml {
         while (<$file_fh>) {
             if (/hook: (.*)/) {
 
-                # Ignore default Attracta hooks
-                next if ( $1 =~ m{ \A ( /usr/local/cpanel/3rdparty/attracta/scripts/pkgacct-restore | /usr/local/cpanel/Cpanel/ThirdParty/Attracta/Hooks/pkgacct-restore ) \z }xms );
+                # tidyoff - Ignore default Attracta hooks
+                next if ( $1 =~ m{ \A ( /usr/local/cpanel/3rdparty/attracta/scripts/pkgacct-restore | # Attracta
+                                        /usr/local/cpanel/Cpanel/ThirdParty/Attracta/Hooks/pkgacct-restore | # Attracta
+                                        CCSHooks::\S+ ) \z }xms ); # tidyon - Calendar and Contacts Server
                 push @hooks_tmp, "$1 ";
             }
         }
@@ -5737,6 +5765,27 @@ sub check_for_etc_ubic_dir {
     if ( -e '/etc/ubic' ) {
         print_warn('/etc/ubic: ');
         print_warning('exists! This directory will cause ea-tomcat85 to fail when adding new users, see TECH-707');
+    }
+}
+
+sub check_for_acls_cpconf {
+    return unless i_am('cpanel');
+    return unless defined $CPCONF{'acls'};
+    if ( $CPCONF{'acls'} ) {
+        print_warn('Permissions: ');
+        print_warning('"acls" Tweak Setting enabled. This affects homedir, docroot, and htpasswd, see TECH-751');
+    }
+}
+
+sub check_for_port_53_dnsmasq {
+    return unless my $ports = get_lsof_port_href();
+    return unless exists $ports->{'53'};
+    for my $ref ( @{ $ports->{'53'} } ) {
+        if ( $ref->{'CMD'} =~ m{ \A dnsmasq }xms ) {
+            print_warn('Dnsmasq: ');
+            print_warning('listening on port 53, known to cause issues with AutoSSL, see TECH-718');
+            last;
+        }
     }
 }
 
@@ -8351,6 +8400,21 @@ sub check_for_spoofed_kernel_modules {
     }
 }
 
+sub check_for_bad_perms_auth_keys {
+    my $checkmode = '0600';
+    my $path      = '/root/.ssh/authorized_keys';
+    return unless my ( $uid, $gid ) = ( lstat($path) )[ 4, 5 ];
+    my $user = getpwuid($uid);
+    $user = $user || $uid;
+    my $group = getgrgid($gid);
+    $group = $group || $gid;
+
+    if ( !( $user eq 'root' ) || !( $group eq 'root' ) ) {
+        print_generic_hack_predef('Potential Root Compromise');
+        print_critical( 'Non-default Perms: ' . $path . ' [owner ' . $user . ':' . $group . '] (default root:root)' );
+    }
+}
+
 sub check_for_cpro {
     return unless i_am('cptech');
     my @paths = qw(
@@ -8968,7 +9032,7 @@ sub get_tiers_json_href {
     return $href;
 }
 
-sub get_tiers_for_version_aref {
+sub get_tier_info_for_version_href {
     my ($version) = @_;
     return unless my $tiers_ref = get_tiers_json_href();
     my ( $parent_ver, $major_ver ) = split( /\./, $version, 3 );
@@ -8978,22 +9042,14 @@ sub get_tiers_for_version_aref {
     $major_ver++ if $major_ver % 2;    # Bump odd dev versions
     my $full_ver = join( '.', $parent_ver, $major_ver );
 
-    if ( exists $tiers_ref->{'tiers'}->{$full_ver} ) {
-        for my $tier ( @{ $tiers_ref->{'tiers'}->{$full_ver} } ) {
-            if ( exists $tier->{'is_lts'} and $tier->{'is_lts'} ) {
-                push @found_tiers, $full_ver . ' LTS';
-            }
-            if ( exists $tier->{'named'} ) {
-                for my $named_tier ( @{ $tier->{'named'} } ) {
-                    push @found_tiers, $named_tier;
-                }
-            }
-        }
+    if ( exists $tiers_ref->{'tiers'}->{$full_ver} and exists $tiers_ref->{'tiers'}->{$full_ver}->[0] ) {
+        return $tiers_ref->{'tiers'}->{$full_ver}->[0];
     }
-    return \@found_tiers;
+
+    return;
 }
 
-sub _populate_run_state {    ## no critic (RequireArgUnpacking)
+sub _populate_run_state {              ## no critic (RequireArgUnpacking)
     return unless _init_run_state();
     _set_run_type('kernelcare') if -x '/usr/bin/kcarectl';
 
