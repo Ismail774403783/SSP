@@ -424,6 +424,7 @@ sub run {
     check_imunify360_running();
     check_for_etc_ubic_dir();
     check_for_acls_cpconf();
+    check_for_port_53_dnsmasq();
 
     # [3RDP]
     check_smtp_processes();
@@ -5773,6 +5774,18 @@ sub check_for_acls_cpconf {
     if ( $CPCONF{'acls'} ) {
         print_warn('Permissions: ');
         print_warning('"acls" Tweak Setting enabled. This affects homedir, docroot, and htpasswd, see TECH-751');
+    }
+}
+
+sub check_for_port_53_dnsmasq {
+    return unless my $ports = get_lsof_port_href();
+    return unless exists $ports->{'53'};
+    for my $ref ( @{ $ports->{'53'} } ) {
+        if ( $ref->{'CMD'} =~ m{ \A dnsmasq }xms ) {
+            print_warn('Dnsmasq: ');
+            print_warning('listening on port 53, known to cause issues with AutoSSL, see TECH-718');
+            last;
+        }
     }
 }
 
