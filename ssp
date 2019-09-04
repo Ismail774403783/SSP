@@ -8467,6 +8467,7 @@ sub check_for_cpro {
 sub check_for_fkcplisc {
     return unless i_am('cptech');
     my @paths = qw(
+      /bin/cpk
       /bin/cplicense
       /bin/cplicense-32bit
       /bin/cplicense-64bit
