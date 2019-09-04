@@ -281,6 +281,7 @@ sub run {
     check_cpupdate_conf();
     check_interface_lo();
     check_cpanelconfig_filetype();
+    check_cpanelsync_exclude_no_chmod();
     check_cpanelsync_exclude();
     check_for_rawopts();
     check_for_rawenv();
@@ -2773,6 +2774,13 @@ sub check_cpanelconfig_filetype {
         print_warn("$CPANEL_CONFIG_FILE: ");
         print_warning("filetype is something other than 'ASCII text'! ($file)");
     }
+}
+
+sub check_cpanelsync_exclude_no_chmod {
+    my $cpanelsync_exclude_no_chmod = '/etc/cpanelsync.no_chmod';
+    return unless ( -f $cpanelsync_exclude_no_chmod && -s _ );
+    print_warn('cpanelsync exclude: ');
+    print_warning("$cpanelsync_exclude_no_chmod is not empty!");
 }
 
 sub check_cpanelsync_exclude {
