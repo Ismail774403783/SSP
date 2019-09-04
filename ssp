@@ -1537,7 +1537,7 @@ sub print_cpanel_info {
         $major_ver++ if $major_ver % 2;    # Bump odd dev versions
         $expire_info = 'has expired.' if $major_ver < 62;    # TIERS.json file only contains 62+
         return unless my $version_href = get_tier_info_for_version_href( $parent_ver . '.' . $major_ver );
-        $expire_info = 'has expired (version is not a named or LTS tier in TIERS.json)' if ( !keys %{$version_href} );
+        $expire_info = 'has expired (version is not a named or LTS tier in TIERS.json)' if ( !keys %{$version_href} || ( !exists $version_href->{'named'} && !exists $version_href->{'is_lts'} ) );
         if ( exists $version_href->{'expires'} && $version_href->{'expires'} =~ /\A \d+ \Z/xms ) {
             my @months = ( 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec' );
             if ( $version_href->{'expires'} <= time() ) {
