@@ -64,8 +64,8 @@ test:
 	perl -c $(PROJECT) || ( echo "$(PROJECT) perl syntax check failed"; exit 2 )
 	echo "-- Running perlcritic"
 	$(PERLCRITIC) --profile $(PERLCRITICRC) $(PROJECT)
-	echo "-- Running prove"
-	$(PERLPROVE)
+	#echo "-- Running prove"
+	#$(PERLPROVE)
 
 ## Run perltidy, compare, and ask for overwrite
 tidy: test $(PROJECT).tdy
