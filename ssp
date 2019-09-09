@@ -425,6 +425,7 @@ sub run {
     check_for_etc_ubic_dir();
     check_for_acls_cpconf();
     check_for_port_53_dnsmasq();
+    check_root_dns_resolvers();
 
     # [3RDP]
     check_smtp_processes();
@@ -5786,6 +5787,22 @@ sub check_for_port_53_dnsmasq {
             last;
         }
     }
+}
+
+# TODO: Once 84 is largely distrubuted, update this to use one of our modules
+sub check_root_dns_resolvers {
+    my $limit     = 3;
+    my @resolvers = ( 'a' .. 'm' );
+    my @failed;
+    foreach my $dns (@resolvers) {
+        last if scalar @failed >= $limit;
+        chomp( my $ip = timed_run( 5, 'dig', '-4', '+short',  "$dns.root-servers.net", "\@$dns.root-servers.net" ) );
+        push @failed, $dns unless ( $ip =~ /\d+\.\d+\.\d+\.\d+/ );
+    }
+    return unless @failed;
+    print_warn('DNS: ');
+    print_warning('Root DNS servers are unreachable [ ' . join(' ', @failed) . " ]. This can break AutoSSL. We stop after $limit failures, verify with this command:");
+    print_warning("\t \\_ " . 'for i in {a..m}; do echo -n "$i.root-servers.net: "; dig -4 "$i".root-servers.net @"$i".root-servers.net +short;done');
 }
 
 sub check_if_httpdconf_ipaddrs_exist {
