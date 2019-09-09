@@ -109,7 +109,6 @@ sub init {
           get_mysql_numeric_version
           get_new_backup_conf_href
           get_old_backup_conf_href
-          get_rpm_changelog_href
           get_phpini_aref
           get_process_pid_href
           get_rpm_href
@@ -449,14 +448,10 @@ sub run {
     check_for_magicspam();
 
     # [CRIT] - Anything that requires a pre-defined response to be sent, escalation, or extreme care.
+    check_cves_vulnerable_versions();
     check_for_unsupported_php();         # Extreme care!
     check_for_bash_secadv_20140924();    # advisory
-    check_for_exim_secadv_201910149();
-    check_for_exim_cve_2018_6789();      # advisory
     all_malware_checks();
-    check_for_openssl_heartbleed_bug();
-    check_for_openssl_secadv_20140605();
-    check_for_dovecot_secadv_20197524();
 
     check_for_additional_rpms();
     check_for_percona_rpms();
@@ -498,14 +493,10 @@ sub print_help {
 }
 
 sub csi_checks_only {
+    check_cves_vulnerable_versions();
     check_port_hash();
     check_for_bash_secadv_20140924();    # advisory
     all_malware_checks();
-    check_for_openssl_heartbleed_bug();
-    check_for_openssl_secadv_20140605();
-    check_for_dovecot_secadv_20197524();
-    check_for_exim_secadv_201910149();
-    check_for_exim_cve_2018_6789();
     check_mysql_skip_grants();
     print_info2('SSP checks done.');
 }
@@ -7059,39 +7050,42 @@ sub check_for_cron_allow {
     }
 }
 
-sub check_for_openssl_heartbleed_bug {
-    return if os_version_is(qw( >= 6.6 ));
-    return if os_version_is(qw( <= 5 ));
-    my $changelog_href = get_rpm_changelog_href();
-    return unless $changelog_href->{openssl}->{version};
-    return if $changelog_href->{openssl}->{'CVE-2014-0160'}->{seen};
-
-    # only 1.0.1[a-f] is vuln (and 1.0.2-beta which no one should be using)
-    return unless ( $changelog_href->{openssl}->{version} =~ /(\d+)\.(\d+)\.(\d+)[a-f]/ );
-
-    my ( $maj, $min, $patch ) = ( $1, $2, $3 );
-    return if $maj != 1;
-    return if $min != 0;
-    return if $patch != 1;
-
-    print_critical();
-    print_crit('Heartbleed: ');
-    print_critical('Send customer this premade: SECURITY - OpenSSL Heartbleed Vulnerability - Discovery');
-    print_critical('The following check was used: rpm -q --changelog openssl | grep \' CVE-2014-0160 \'');
-    print_critical('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
-    print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
-    print_critical();
+# TODO: Add cptech only warn option?
+sub check_cves_vulnerable_versions {
+    my $changelog = get_rpm_vulnerable();
+    # Loop through each package
+    foreach my $pkg ( keys %{ $changelog } ) {
+        my @cves;
+        # Bail if we did not get a package version(i.e. not installed or corrupt rpmdb)
+        next unless ( defined( $changelog->{$pkg}->{version} ) );
+        # Loop through each CVE
+        foreach my $cve ( grep { /^CVE/ } keys %{ $changelog->{$pkg} } ) {
+            # Skip if changelog contains the CVE(i.e. seen = 1)
+            next if $changelog->{$pkg}->{$cve}->{seen};
+            # Skip unless the OS is vulnerable to this CVE, if "os_vuln" exists
+            if ( exists( $changelog->{$pkg}->{$cve}->{os_vuln} ) ) {
+                next unless $changelog->{$pkg}->{$cve}->{os_vuln};
+            }
+            # If the anonymous sub "vuln" returns true, the package is vulnerable
+            push @cves, $cve if ( exists( $changelog->{$pkg}->{$cve}->{vuln} ) && $changelog->{$pkg}->{$cve}->{vuln}->( $changelog->{$pkg}->{version} ) );
+        }
+        next unless @cves;
+        print_critical();
+        print_crit("$pkg:\n");
+        foreach my $cve ( @cves ) {
+            my $msg = exists( $changelog->{$pkg}->{$cve}->{warn} ) ? $changelog->{$pkg}->{$cve}->{warn} : "notify client https://nvd.nist.gov/vuln/detail/$cve";
+            print_critical("\t \\_ Vulnerable to $cve, $msg");
+        }
+        print_critical('The following check was used: rpm -q --changelog ' . $pkg . ' | grep \'CVE-XXXX-XXXX\'');
+        print_critical('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
+        print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
+        print_critical();
+    }
 }
 
-sub check_for_openssl_secadv_20140605 {
-    return unless os_version_is(qw( <= 6 ));    # Only RHEL/CentOS 5 and 6 need apply
-    my $changelog_href = get_rpm_changelog_href();
-    return unless $changelog_href->{openssl}->{version};
-    return if $changelog_href->{openssl}->{'CVE-2014-0224'}->{seen};
-
-    # fixed in openssl 1.0.1h, 1.0.0m, and 0.9.8za
-    return unless ( $changelog_href->{openssl}->{version} =~ /(\d+)\.(\d+)\.(\d+)([a-z])([a-z]?)/ );
-
+sub openssl_version_to_numbers {
+    my ($ver) = @_;
+    return unless ( $ver =~ /(\d+)\.(\d+)\.(\d+)([a-z])([a-z]?)/ );
     my ( $maj, $min, $patch ) = ( $1, $2, $3 );
 
     # If we map the alphas into a number and sum the values the version will be compatible with version_compare() and save us a lot of trouble, i.e. h=8, m=13, and za=27
@@ -7099,18 +7093,142 @@ sub check_for_openssl_secadv_20140605 {
     my $sub = 0;
     if ($4) { $sub += $al2num{ lc($4) } }
     if ($5) { $sub += $al2num{ lc($5) } }
-    my $ver = join( '.', $maj, $min, $patch, $sub );
-    return if version_compare( $ver, qw( >= 1.0.1.8 ) );                # If > 1.0.1h we're done.
-    return if ( version_compare( $ver, qw( < 1.0.1.0 ) ) && version_compare( $ver, qw( >= 1.0.0.13 ) ) );    # If < 1.0.1 and >= 1.0.0m we're done.
-    return if ( version_compare( $ver, qw( < 0.9.9.0 ) ) && version_compare( $ver, qw( >= 0.9.8.27 ) ) );    # If < 0.9.9 and >= 0.9.8za we're done.
+    $ver = join( '.', $maj, $min, $patch, $sub );
+    return $ver;
+}
 
-    print_critical();
-    print_crit('OpenSSL RPM missing secadv_20140605 patches: ');
-    print_critical('CVE-2014-0224');
-    print_critical('Send customer this premade: "SECURITY - OpenSSL advisory 2014-06-05 - Discovery"');
-    print_critical('!! BEFORE SENDING PREMADE VERIFY THE MISSING CVE PATCHES WITH: rpm -q --changelog openssl | egrep \' CVE-201(0|4)-\'');
-    print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
-    print_critical();
+# The "regex" key provides the search term for the package's changelog
+# The "warn" key provides the warning for the end-user, should the package be found vulnerable
+# The "seen" key indicates the "regex" key was seen in the packages changelog(i.e. not vulnerable)
+# The "os_vuln" key indicates whether the OS is vulnerable to the CVE. This key should only be used to skip if not vulnerable, not a confirmation the packge is vulnerable
+# The "vuln" key indicates if the package version is vulnerable
+sub get_rpm_vulnerable {
+    my %changelog_queries = (
+        'openssl' => {
+            'CVE-2014-0160' => {
+                regex   => qr{ CVE-2014-0160 },
+                warn    => 'send premade: SECURITY - OpenSSL Heartbleed Vulnerability - Discovery',
+                seen    => 0,
+                os_vuln => sub {
+                    return 0 if ( os_version_is(qw( >= 6.6 )) );    # If >= 6.6, not vulnerable
+                    return 0 if ( os_version_is(qw( <= 5 )) );      # If <= 5, not vulnerable
+                    return 1;                                       # Else, vulnerable
+                },
+                vuln => sub {
+                    my ($ver) = @_;
+                    $ver = openssl_version_to_numbers($ver);
+                    return 1 if ( version_compare( $ver, qw( >= 1.0.1.1 ) ) && version_compare( $ver, qw( <= 1.0.1.6 ) ) );    # If >= 1.0.1.a and <= 1.0.1.f, vulnerable
+                    return 0;                                                                                                  # Else, not vulnerable
+                },
+            },
+            'CVE-2014-0224' => {
+                regex   => qr{ CVE-2014-0224 },
+                warn    => 'send premade: SECURITY - OpenSSL advisory 2014-06-05 - Discovery',
+                seen    => 0,
+                os_vuln => sub {
+                    return ( os_version_is(qw( <= 6 )) ? 1 : 0 );
+                },
+                vuln => sub {
+                    my ($ver) = @_;
+                    $ver = openssl_version_to_numbers($ver);
+                    return 0 if ( version_compare( $ver, qw( >= 1.0.1.8 ) ) );                                                 # If >= 1.0.1h, not vulnerable
+                    return 0 if ( version_compare( $ver, qw( < 1.0.1.0 ) ) && version_compare( $ver, qw( >= 1.0.0.13 ) ) );    # If < 1.0.1 and >= 1.0.0m, not vulnerable
+                    return 0 if ( version_compare( $ver, qw( < 0.9.9.0 ) ) && version_compare( $ver, qw( >= 0.9.8.27 ) ) );    # If < 0.9.9 and >= 0.9.8za, not vulnerable
+                    return 1;                                                                                                  # Else, vulnerable
+                }
+            },
+        },
+        'dovecot' => {
+            'CVE-2019-11500' => {
+                regex => qr{CVE-2019-11500},
+                warn  => 'send premade: SECURITY - Dovecot/Pigeonhole - CVE-2019-11500',
+                seen  => 0,
+                vuln  => sub {
+                    my ($ver) = @_;
+                    return 0 if ( version_compare( $ver, qw( >= 2.3.7.2 ) ) );                                                 # If >= 2.3.7.2, not vulnerable
+                    return 1 if ( version_compare( $ver, qw( < 2.2.36.4 ) ) );                                                 # If < 2.2.36.4, vulnerable
+                    return 1 if ( version_compare( $ver, qw( >= 2.3.0.0 ) ) && version_compare( $ver, qw( < 2.3.7.2 ) ) );     # If >= 2.3.0.0 and < 2.3.7.2, vulnerable
+                    return 0;                                                                                                  # Else, not vulnerable
+                },
+            },
+            'CVE-2019-7524' => {
+                regex => qr{ CVE-2019-7524},
+                warn  => 'send premade: SECURITY - Dovecot CVE-2019-7524',
+                seen  => 0,
+                vuln  => sub {
+                    my ($ver) = @_;
+                    return 0 if ( version_compare( $ver, qw( >= 2.3.5.1 ) ) );                                                 # If >= 2.3.5.1, not vulnerable
+                    return 1 if ( version_compare( $ver, qw( < 2.2.36.3 ) ) );                                                 # If < 2.2.36.3, vulnerable
+                    return 1 if ( version_compare( $ver, qw( >= 2.3.0.0 ) ) && version_compare( $ver, qw( < 2.3.5.1 ) ) );     # If >= 2.3.0.0 and < 2.3.5.1, vulnerable
+                    return 0;                                                                                                  # Else, not vulnerable
+                },
+            },
+        },
+        'ea-apache24' => {
+            'CVE-2019-0211' => {
+                regex => qr{CVE-2019-0211:},
+                warn  => 'send premade: SECURITY - CVE-2019-0211 (Apache 2.4.38)',
+                seen  => 0,
+                vuln  => sub {
+                    my ($ver) = @_;
+                    return 1 if ( version_compare( $ver, qw( >= 2.4.17 ) ) && version_compare( $ver, qw( <= 2.4.38 ) ) );       # If >= 2.4.17 and <= 2.4.38, vulnerable
+                    return 0;                                                                                                   # Else, not vulnerable
+                },
+            },
+        },
+        'exim' => {
+            'CVE-2019-15846' => {
+                regex => qr{CVE-2019-15846},
+                warn  => 'send premade: SECURITY - Exim CVE-2019-15846',
+                seen  => 0,
+                vuln  => sub {
+                    my ($ver) = @_;
+                    return 0 if ( version_compare( $ver, qw( >= 4.92.3 ) ) );    # If >= 4.92.3, not vulnerable
+                    return 1;                                                    # Else, vulnerable
+                },
+            },
+            'CVE-2019-10149' => {
+                regex => qr{CVE-2019-10149},
+                warn  => 'send premade: SECURITY - EXIM - CVE-2019-10149',
+                seen  => 0,
+                vuln  => sub {
+                    my ($ver) = @_;
+                    return 0 if ( version_compare( $ver, qw( > 4.91 ) ) );       # If > 4.91, not vulnerable
+                    return 0 if ( version_compare( $ver, qw( < 4.87 ) ) );       # If <= 4.87, not vulnerable
+                    return 1;                                                    # Else, vulnerable
+                },
+            },
+            'CVE-2018-6789' => {
+                regex => qr{CVE-2018-6789},
+                warn  => 'send premade: SECURITY - EXIM CVE-2018-6789 - DISCOVERY',
+                seen  => 0,
+                vuln  => sub {
+                    my ($ver) = @_;
+                    return 0 if ( version_compare( $ver, qw( >= 4.90.1 ) ) );    # If >= 4.90.1, not vulnerable
+                    return 1;                                                    # Else, vulnerable
+                },
+            },
+        },
+    );
+    my $field_separator = '#^#';
+    my $query_format    = '\'' . $field_separator . '%{NAME}' . $field_separator . '%{VERSION}' . $field_separator . '%{RELEASE}\\n\'';
+    my $changelog       = timed_run( 0, 'rpm --queryformat ' . $query_format . ' -q ' . join( ' ', keys %changelog_queries ) . ' --changelog' );
+    my $package;
+    open( my $fh, '<', \$changelog );
+    while (<$fh>) {
+        chomp;
+        if ( $_ =~ m/ \A \Q$field_separator\E ([\w-]+) \Q$field_separator\E ([\w\.]+) \Q$field_separator\E (\d+)\. /xms ) {
+            $package = $1;
+            $changelog_queries{$package}{version} = $2 . '_' . $3;
+        }
+        if ($package) {
+            foreach my $cve ( grep { /^CVE/ } keys %{ $changelog_queries{$package} } ) {
+                $changelog_queries{$package}{$cve}{seen} = 1 if ( $_ =~ m/$changelog_queries{$package}{$cve}{regex}/ms );
+            }
+        }
+    }
+    close($fh);
+    return \%changelog_queries;
 }
 
 sub check_for_bash_secadv_20140924 {
@@ -7123,122 +7241,6 @@ sub check_for_bash_secadv_20140924 {
     print_critical('    env x=\'() { :;}; echo vulnerable\' bash -c ""');
     print_critical('Send customer this premade: "SECURITY - Bash advisory 2014-09-24 - Discovery"');
     print_critical();
-}
-
-# CVE-2019-7524
-sub check_for_dovecot_secadv_20197524 {
-    my $changelog_href = get_rpm_changelog_href();
-    return unless $changelog_href->{dovecot}->{version};
-    return if $changelog_href->{dovecot}->{'CVE-2019-7524'}->{seen};
-    return if !$changelog_href->{dovecot}->{version};
-
-    # tidyoff - greater readability here than what tidy wants
-    # Vulnerable version: 2.0.14 - 2.3.5
-    return unless ( $changelog_href->{dovecot}->{version} =~ /2\.(             # major 2.X.X
-                                                                  0\.{14,15}|  # minor 2.0.14 - 2.0.15
-                                                                  1\.(\d+)|    # minor 2.1.X
-                                                                  2\.(\d+)|    # minor 2.2.X
-                                                                  3\.[0-5])    # minor 2.3.0 - 2.3.5
-                                                             /x
-                  );
-    # tidyon
-    print_critical();
-    print_crit('Dovecot: ');
-    print_critical('Send customer this premade: SECURITY - Dovecot CVE-2019-7524');
-    print_critical('The following check was used: rpm -q --changelog dovecot | grep \' CVE-2019-7524\'');
-    print_critical('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
-    print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
-    print_critical();
-}
-
-# CVE-2019-0211
-sub check_for_apache_secadv_20190211 {
-
-    # Affects 2.4.38, 2.4.37, 2.4.35, 2.4.34, 2.4.33, 2.4.30, 2.4.29, 2.4.28, 2.4.27, 2.4.26, 2.4.25, 2.4.23, 2.4.20, 2.4.18, 2.4.17
-    # EA3 check since LTS is still 70 and therefore EA3 still supported
-    my $apache_version;
-    if ( i_am('ea3') ) {
-        $apache_version = get_apache_version();
-    }
-    my $changelog_href;
-    if ( i_am('ea4') ) {
-        $changelog_href = get_rpm_changelog_href();
-        return unless $changelog_href->{'ea-apache24'}->{version};
-        return if $changelog_href->{'ea-apache24'}->{'CVE-2019-0211'}->{seen};
-    }
-    $apache_version = $apache_version ? $apache_version : $changelog_href->{'ea-apache24'}->{version};
-    # tidyoff - greater readability here than what tidy wants
-    return unless ( $apache_version =~ /2\.4\.(            # 2.4.X
-                                               3[034578]|  # 2.4.3X
-                                               2[0356789]| # 2.4.2X
-                                               1[78])      # 2.4.1X
-                                       /x
-                  );
-    # tidyon
-
-    print_critical();
-    print_critical('Send customer this premade: SECURITY - CVE-2019-0211 (Apache 2.4.38)');
-    print_critical('The following check was used: rpm -q --changelog ea-apache24 | grep \'CVE-2019-0211:\'');
-    print_critical('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
-    print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
-    print_critical();
-}
-
-sub check_for_exim_secadv_201910149 {
-    return unless i_am_one_of( 'cpanel', 'dnsonly' );
-    my ( $ver, $build_date );
-    my $changelog_href = get_rpm_changelog_href();
-    if ( $changelog_href->{exim}->{version} ) {
-        return if $changelog_href->{exim}->{'CVE-2019-10149'}->{seen};
-        $ver = $changelog_href->{exim}->{version};
-    }
-    else {
-        ( $ver, $build_date ) = get_exim_version_build_date();
-    }
-    return unless $ver;
-
-    # Only affects Exim 4.87 - 4.91
-    # tidyoff - greater readability here than what tidy wants
-    return unless ( $ver =~ /4\.(        # 4.XX
-                                 8[789]| # 4.87 - 4.89
-                                 9[01])  # 4.90 - 4.91
-                            /x
-                  );
-    # tidyon
-
-    print_critical();
-    print_crit('Exim ');
-    print_critical( 'may be vulnerable to CVE-2019-10149 (detected version ' . $ver . ')' );
-    print_critical('The following check was used: rpm -q --changelog exim | grep \'CVE-2019-10149\'');
-    print_critical('!! VERIFY THE CHECK USING THE COMMAND ABOVE BEFORE SENDING THE PREMADE !!');
-    print_critical('This check does NOT take corrupt RPM dbs into account, and CAN report false-positive results if corrupt');
-    if ( i_am('cptech') ) {
-        print_critical("\t \\_ Send customer this premade: SECURITY - EXIM - CVE-2019-10149");
-        print_critical("\t \\_ Tag case CPANEL-27832 if root compromised");
-    }
-}
-
-sub check_for_exim_cve_2018_6789 {
-    return unless i_am_one_of( 'cpanel', 'dnsonly' );
-    return unless my ( $ver, $print_date ) = get_exim_version_build_date();
-    return unless my ( $day, $month, $year ) = split( /-/, $print_date );
-    my $mon_num = _month_to_num($month);
-    return unless defined $mon_num;
-    return unless my $build_ts = timegm( 0, 0, 0, $day, $mon_num, $year );    # Treat as GMT for comparison
-
-    my $min_ts  = 1517961600;
-    my $min_ver = '4.90';
-    if ( cpanel_version_is( '<', '11.69' ) ) {
-        $min_ver = '4.89_1';
-    }
-
-    if ( version_compare( $ver, '<', $min_ver ) or version_compare( $build_ts, '<', $min_ts ) ) {
-        print_critical();
-        print_crit('Exim ');
-        print_critical( 'may be vulnerable to CVE-2018-6789 (detected version ' . $ver . ' built ' . $print_date . ')' );
-        print_critical("\t \\_ Send customer this premade: SECURITY - EXIM CVE-2018-6789 - DISCOVERY");
-        print_critical();
-    }
 }
 
 sub get_exim_version_build_date {
@@ -8611,63 +8613,6 @@ sub get_printable_rpm_packages {
     }
     @list = sort @list;
     return @list;
-}
-
-sub get_rpm_changelog_href {
-    my $field_separator   = '#^#';
-    my $query_format      = '\'' . $field_separator . '%{NAME}' . $field_separator . '%{VERSION}\\n\'';
-    my %changelog_queries = (
-        'openssl' => {
-            'CVE-2014-0160' => {
-                regex => qr{ CVE-2014-0160 },
-                seen  => 0,
-            },
-            'CVE-2014-0224' => {
-                regex => qr{ CVE-2014-0224 },
-                seen  => 0,
-            },
-        },
-        'dovecot' => {
-            'CVE-2019-7524' => {
-                regex => qr{ CVE-2019-7524},
-                seen  => 0,
-            },
-        },
-        'ea-apache24' => {
-            'CVE-2019-0211' => {
-                regex => qr{CVE-2019-0211:},
-                seen  => 0,
-            },
-        },
-        'exim' => {
-            'CVE-2019-10149' => {
-                regex => qr{CVE-2019-10149},
-                seen  => 0,
-            },
-            'CVE-2018-6789' => {
-                regex => qr{CVE-2018-6789},
-                seen  => 0,
-            },
-        },
-    );
-
-    my $changelog = timed_run( 0, 'rpm --queryformat ' . $query_format . ' -q ' . join( ' ', keys %changelog_queries ) . ' --changelog' );
-    my $package;
-    open( my $fh, '<', \$changelog );
-    while (<$fh>) {
-        chomp;
-        if ( $_ =~ m/ \A \Q$field_separator\E ([\w-]+) \Q$field_separator\E ([\w\.]+) /xms ) {
-            $package = $1;
-            $changelog_queries{$package}{version} = $2;
-        }
-        if ($package) {
-            foreach my $cve ( grep { /^CVE/ } keys %{ $changelog_queries{$package} } ) {
-                $changelog_queries{$package}{$cve}{seen} = 1 if ( $_ =~ m/$changelog_queries{$package}{$cve}{regex}/ms );
-            }
-        }
-    }
-    close($fh);
-    return \%changelog_queries;
 }
 
 sub get_flat_conf_href {
