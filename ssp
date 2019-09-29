@@ -535,6 +535,7 @@ sub all_malware_checks {
     check_for_malicious_root_cron();
     check_for_spoofed_kernel_modules();
     check_for_bad_perms_auth_keys();
+    check_for_strange_setuid_binaries();
 }
 
 sub get_phpini_aref {
@@ -8471,6 +8472,14 @@ sub check_for_bad_perms_auth_keys {
         print_generic_hack_predef('Potential Root Compromise');
         print_critical( 'Non-default Perms: ' . $path . ' [owner ' . $user . ':' . $group . '] (default root:root)' );
     }
+}
+
+sub check_for_strange_setuid_binaries {
+    my @paths = qw( /etc/.ip /var/log/.log );
+    return unless my @bad_paths = grep { -e $_ } @paths;
+    print_generic_hack_predef('Potential Root Compromise');
+    print_critical('The following files were found(see TECH-791):');
+    print_critical( "\t" . join( "\n\t", @bad_paths ) );
 }
 
 sub check_for_cpro {
