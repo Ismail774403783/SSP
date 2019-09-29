@@ -5313,6 +5313,7 @@ sub check_cpanel_config {
         'root'                        => { default       => '/usr/local/cpanel', help => 'An invalid root setting can cause WHM to fail to start.  See ticket 5463121.' },
         'skiphttpauth'                => { default       => '1', help => 'HTTP auth enabled' },
         'skipparentcheck'             => { default       => '0', help => 'Allows other applications to run the cPanel and admin binaries' },
+        'acls'                        => { default       => '0', help => 'Can cause issues with FileProtect -- see CPANEL-19578' },
     );
 
     if ( defined $CPCONF{'maxmem'} && $CPCONF{'maxmem'} < 512 ) {
