@@ -425,6 +425,7 @@ sub run {
     check_for_etc_ubic_dir();
     check_for_acls_cpconf();
     check_for_port_53_dnsmasq();
+    check_for_port_21_ftp();
     check_root_dns_resolvers();
 
     # [3RDP]
@@ -5788,6 +5789,22 @@ sub check_for_port_53_dnsmasq {
             last;
         }
     }
+}
+
+sub check_for_port_21_ftp {
+    return unless my $ports = get_lsof_port_href();
+    return unless exists $ports->{'21'};
+
+    my ( $pid, $comm ) = @{ $ports->{'21'}->[0] }{qw( PID CMD )};
+    return unless my $exe = readlink "/proc/${pid}/exe";
+    return unless my $cwd = readlink "/proc/${pid}/cwd";
+    return if ( $exe eq '/usr/sbin/pure-ftpd' || $exe eq '/usr/sbin/proftpd' );
+
+    print_warn('Port 21: ');
+    print_warning("something other than Pure-FTPd or ProFTPd is running:");
+    print_magenta("\t \\_ cmd     [$comm]");
+    print_magenta("\t \\_ exe     [$exe]");
+    print_magenta("\t \\_ cwd     [$cwd]");
 }
 
 # TODO: Once 84 is largely distrubuted, update this to use one of our modules
