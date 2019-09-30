@@ -6323,18 +6323,14 @@ sub check_for_license_info {
         print_normal('cPanel Solo (limited to 1 account)');
     }
 
-    my $cpanel_17906_text =
-      "         \\_ If license does not update correctly then fork ticket for license issue if not related to current issue.\n         \\_ In license-issue ticket -- tag case CPANEL-17906, diagnose and resolve possible network-related causes of license update failure and update case if this is successful -- if license update issue can not be resolved, send 'ESCALATE - License issue to Dev' response and escalate ticket to 'QA/Development'.";
     if ( cpanel_version_is(qw ( >= 11.68.0.25 )) ) {
         if ( not $file_is_dnsonly and -e $dnsonly_touchfile ) {
             print_crit('License: ');
             print_critical("$dnsonly_touchfile exists but installed license file is not DNSONLY.  Try using '/usr/local/cpanel/cpkeyclt --force' to update license.");
-            print_critical($cpanel_17906_text);
         }
         if ( $file_is_dnsonly and not -e $dnsonly_touchfile ) {
             print_crit('License: ');
             print_critical("Installed license file is DNSONLY but $dnsonly_touchfile does not exist.  Try using '/usr/local/cpanel/cpkeyclt --force' to update license.");
-            print_critical($cpanel_17906_text);
         }
     }
 
