@@ -9049,8 +9049,11 @@ sub get_tier_info_for_version_href {
     $major_ver++ if $major_ver % 2;    # Bump odd dev versions
     my $full_ver = join( '.', $parent_ver, $major_ver );
 
-    if ( exists $tiers_ref->{'tiers'}->{$full_ver} and exists $tiers_ref->{'tiers'}->{$full_ver}->[0] ) {
-        return $tiers_ref->{'tiers'}->{$full_ver}->[0];
+    if ( exists $tiers_ref->{'tiers'}->{$full_ver} ) {
+        return $tiers_ref->{'tiers'}->{$full_ver}->[0] unless (scalar @{ $tiers_ref->{'tiers'}->{$full_ver} } gt 1);
+        foreach my $tier ( @{ $tiers_ref->{'tiers'}->{$full_ver} } ) {
+            return $tier if exists $tier->{'is_main'} && $tier->{'is_main'};
+        }
     }
 
     return;
