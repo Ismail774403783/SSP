@@ -340,7 +340,7 @@ sub run {
     check_localhost_resolution();
     check_for_apache_listen_host_is_localhost();
     check_roundcube_mysql_pass_mismatch();
-    check_for_hooks_from_var_cpanel_hooks_yaml();
+    check_for_hooks_from_manage_hooks();
     check_mysqld_warnings_errors();
     check_mysql_config();
     check_mysql_datadir();
@@ -5170,23 +5170,19 @@ sub check_roundcube_mysql_pass_mismatch {
     }
 }
 
-sub check_for_hooks_from_var_cpanel_hooks_yaml {
-    my $hooks_yaml = '/var/cpanel/hooks.yaml';
-    return unless -f $hooks_yaml;
+sub check_for_hooks_from_manage_hooks {
+    return unless my $hooks_list = timed_run( 0, '/usr/local/cpanel/bin/manage_hooks', 'list' );
     my ( @hooks_tmp, @hooks );
 
-    if ( open my $file_fh, '<', $hooks_yaml ) {
-        while (<$file_fh>) {
-            if (/hook: (.*)/) {
+    foreach ( split( /\n/, $hooks_list ) ) {
+        if (/hook: (.*)/) {
 
-                # tidyoff - Ignore default Attracta hooks
-                next if ( $1 =~ m{ \A ( /usr/local/cpanel/3rdparty/attracta/scripts/pkgacct-restore | # Attracta
-                                        /usr/local/cpanel/Cpanel/ThirdParty/Attracta/Hooks/pkgacct-restore | # Attracta
-                                        CCSHooks::\S+ ) \z }xms ); # tidyon - Calendar and Contacts Server
-                push @hooks_tmp, "$1 ";
-            }
+            # tidyoff - Ignore default Attracta hooks
+            next if ( $1 =~ m{ \A ( /usr/local/cpanel/3rdparty/attracta/scripts/pkgacct-restore | # Attracta
+                                    /usr/local/cpanel/Cpanel/ThirdParty/Attracta/Hooks/pkgacct-restore | # Attracta
+                                    CCSHooks::\S+ ) \z }xms ); # tidyon - Calendar and Contacts Server
+            push @hooks_tmp, "$1 ";
         }
-        close $file_fh;
     }
 
     for my $hook (@hooks_tmp) {
