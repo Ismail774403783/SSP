@@ -2637,11 +2637,11 @@ sub check_runlevel {
 }
 
 sub check_multiuser_target {
-    return unless os_version_is(qw( >= 7 ));
-    my $warn;
-    chomp( my $target = timed_run( 0, 'systemctl', 'get-default' ) );
-    chomp( my $active = timed_run( 0, 'systemctl', 'is-active', 'multi-user.target' ) );
+    return if os_version_is(qw( < 7 )) || i_am('amazon');
+    chomp( my $target = timed_run( 0, 'systemctl', 'get-default' ) || return );
+    chomp( my $active = timed_run( 0, 'systemctl', 'is-active', 'multi-user.target' ) || return );
 
+    my $warn;
     $warn .= ' [current ' . $target . '] (default multi-user.target)' if ( $target ne 'multi-user.target' );
     $warn .= ' [current ' . $active . '] (default active)'            if ( $active ne 'active' );
 
