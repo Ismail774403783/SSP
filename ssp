@@ -244,6 +244,7 @@ sub run {
     print_kernelcare_info();
     print_cpanel_info();
     check_for_cpanel_update();
+    check_lts_autofixer();
     print_uptime();
     print_apache_info();
     print_lsws_info();
@@ -1167,8 +1168,10 @@ sub get_meminfo {
 }
 
 sub get_cpupdate_conf {
+    my ($conf) = @_;
+    $conf = defined($conf) ? $conf : '/etc/cpupdate.conf';
     my %conf;
-    if ( open( my $conf_fh, '<', '/etc/cpupdate.conf' ) ) {
+    if ( open( my $conf_fh, '<', $conf ) ) {
         local $/ = undef;
         %conf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($conf_fh) );
         close $conf_fh;
@@ -1616,6 +1619,15 @@ sub check_for_cpanel_update {
         print_info('cPanel update check: ');
         print_warning( "UPDATE AVAILABLE (" . _get_run_var('cpanel_original_version') . " -> $available_tier_version)" );
     }
+}
+
+sub check_lts_autofixer {
+    my $file = '/etc/cpupdate.conf.update_config_prefs';
+    return unless -f $file;
+    my $cpupdate_conf = get_cpupdate_conf($file);
+    my $version = defined( $cpupdate_conf->{'CPANEL'} ) ? $cpupdate_conf->{'CPANEL'} : 'UNKNOWN';
+    print_info('LTS Autofixer: ');
+    print_warning("updated this server from tier \"$version\", see TECH-848");
 }
 
 sub check_perl_version_less_than_588 {
