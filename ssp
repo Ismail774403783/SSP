@@ -3357,6 +3357,7 @@ sub check_for_non_default_permissions {
             '/bin/passwd'                                 => { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' },
             '/etc/backupmxhosts'                          => { mode => ['0640'], group => 'mail' },
             '/etc/cpbackup.conf'                          => { mode => ['0644'] },
+            '/etc/cpupdate.conf'                          => { mode => ['0644'], attr_check => [ 'IMMUTABLE' ], attr_help => 'Please tag the ticket to case TECH-853' },
             '/etc/dbowners'                               => { mode => ['0640'], group => 'mail' },
             '/etc/demodomains'                            => { mode => ['0640'], group => 'mail' },
             '/etc/demouids'                               => { mode => ['0640'], group => 'mail' },
