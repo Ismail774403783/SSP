@@ -463,6 +463,7 @@ sub run {
     check_for_broken_rpm();
     check_for_ea4_mismatch();
     check_mysql_skip_grants();
+    check_cpanel_upnext_auto_update();
 
     print_info2('Done.');
 
@@ -5576,6 +5577,17 @@ sub check_mysql_skip_grants {
         print_crit('MySQL: ');
         print_critical('Root MySQL access was obtained with a random password, is \'skip-grant-tables\' enabled?');
         print_critical( "\t \\_ " . 'Verify \'skip-grant-tables\' is enabled and inform the client of the inherent risks of running MySQL without grants' );
+    }
+}
+
+sub check_cpanel_upnext_auto_update {
+    return unless my $cpupdate_conf = get_cpupdate_conf();
+    return unless defined( $cpupdate_conf->{'CPANEL'} );
+    if ( $cpupdate_conf->{'CPANEL'} =~ /^11\.\d\d$/
+        && version_compare( $cpupdate_conf->{'CPANEL'}, qw( < 11.78) ) ) {
+        print_crit('cPanel Update: ');
+        print_critical( 'stuck on ' . $cpupdate_conf->{'CPANEL'});
+        print_critical("\t \\_ Tag ticket to TECH-854 and notify Supervisor");
     }
 }
 
