@@ -5193,7 +5193,8 @@ sub check_for_hooks_from_manage_hooks {
             # tidyoff - Ignore default Attracta hooks
             next if ( $1 =~ m{ \A ( /usr/local/cpanel/3rdparty/attracta/scripts/pkgacct-restore | # Attracta
                                     /usr/local/cpanel/Cpanel/ThirdParty/Attracta/Hooks/pkgacct-restore | # Attracta
-                                    CCSHooks::\S+ ) \z }xms ); # tidyon - Calendar and Contacts Server
+                                    CCSHooks::\S+ | # Calendar and Contacts Server
+                                    NginxHooks::\S+) \z }xms ); # tidyon - ea-nginx
             push @hooks_tmp, "$1 ";
         }
     }
