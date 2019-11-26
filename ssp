@@ -34,7 +34,7 @@ use Cwd qw(abs_path);
 use Getopt::Long();
 
 # Application version (The project maintainer will bump this, don't modify it.)
-our $VERSION = '4.99.211';
+our $VERSION = '4.99.212';
 
 # Global variables that alter application runtime
 our $OPT_SKIP_NETWORKING;    # Disable network calls
@@ -244,6 +244,7 @@ sub run {
     print_kernelcare_info();
     print_cpanel_info();
     check_for_cpanel_update();
+    check_lts_autofixer();
     print_uptime();
     print_apache_info();
     print_lsws_info();
@@ -340,7 +341,7 @@ sub run {
     check_localhost_resolution();
     check_for_apache_listen_host_is_localhost();
     check_roundcube_mysql_pass_mismatch();
-    check_for_hooks_from_var_cpanel_hooks_yaml();
+    check_for_hooks_from_manage_hooks();
     check_mysqld_warnings_errors();
     check_mysql_config();
     check_mysql_datadir();
@@ -463,6 +464,7 @@ sub run {
     check_for_broken_rpm();
     check_for_ea4_mismatch();
     check_mysql_skip_grants();
+    check_cpanel_upnext_auto_update();
 
     print_info2('Done.');
 
@@ -1167,8 +1169,10 @@ sub get_meminfo {
 }
 
 sub get_cpupdate_conf {
+    my ($conf) = @_;
+    $conf = defined($conf) ? $conf : '/etc/cpupdate.conf';
     my %conf;
-    if ( open( my $conf_fh, '<', '/etc/cpupdate.conf' ) ) {
+    if ( open( my $conf_fh, '<', $conf ) ) {
         local $/ = undef;
         %conf = map { ( split( /=/, $_, 2 ) )[ 0, 1 ] } split( /\n/, readline($conf_fh) );
         close $conf_fh;
@@ -1616,6 +1620,15 @@ sub check_for_cpanel_update {
         print_info('cPanel update check: ');
         print_warning( "UPDATE AVAILABLE (" . _get_run_var('cpanel_original_version') . " -> $available_tier_version)" );
     }
+}
+
+sub check_lts_autofixer {
+    my $file = '/etc/cpupdate.conf.update_config_prefs';
+    return unless -f $file;
+    my $cpupdate_conf = get_cpupdate_conf($file);
+    my $version = defined( $cpupdate_conf->{'CPANEL'} ) ? $cpupdate_conf->{'CPANEL'} : 'UNKNOWN';
+    print_info('LTS Autofixer: ');
+    print_warning("updated this server from tier \"$version\", see TECH-848");
 }
 
 sub check_perl_version_less_than_588 {
@@ -2637,11 +2650,11 @@ sub check_runlevel {
 }
 
 sub check_multiuser_target {
-    return unless os_version_is(qw( >= 7 ));
-    my $warn;
-    chomp( my $target = timed_run( 0, 'systemctl', 'get-default' ) );
-    chomp( my $active = timed_run( 0, 'systemctl', 'is-active', 'multi-user.target' ) );
+    return if os_version_is(qw( < 7 )) || i_am('amazon');
+    chomp( my $target = timed_run( 0, 'systemctl', 'get-default' ) || return );
+    chomp( my $active = timed_run( 0, 'systemctl', 'is-active', 'multi-user.target' ) || return );
 
+    my $warn;
     $warn .= ' [current ' . $target . '] (default multi-user.target)' if ( $target ne 'multi-user.target' );
     $warn .= ' [current ' . $active . '] (default active)'            if ( $active ne 'active' );
 
@@ -3145,7 +3158,7 @@ sub check_apache_modules {
     $add->( 'ruid2_module',   'Can cause file permission problems when using LiteSpeed Web Server (see ticket 5154193)' ) if $lsws_full_version;
     if ( i_am('ea4') ) {
         $add->( 'fcgid_module',   'Has many caveats, see https://documentation.cpanel.net/display/EA4/Apache+Module%3A+FCGId' );
-        $add->( 'userdir_module', 'Will not execute PHP scripts via PHP-FPM.' );
+        $add->( 'userdir_module', 'PHP scripts accessed by userdir will not be executed via PHP-FPM.' );
         my $ea4_php = get_installed_ea4_php_href();
         if ( defined($ea4_php) && defined( $ea4_php->{default} ) && defined( $ea4_php->{ $ea4_php->{default} }->{handler} ) && $ea4_php->{ $ea4_php->{default} }->{handler} eq "cgi" ) {
             $add->( 'userdir_module', 'Will not execute PHP scripts via CGI handler.' );
@@ -3345,6 +3358,7 @@ sub check_for_non_default_permissions {
             '/bin/passwd'                                 => { symlink => '/usr/local/cpanel/bin/jail_safe_passwd' },
             '/etc/backupmxhosts'                          => { mode => ['0640'], group => 'mail' },
             '/etc/cpbackup.conf'                          => { mode => ['0644'] },
+            '/etc/cpupdate.conf'                          => { mode => ['0644'], attr_check => [ 'IMMUTABLE' ], attr_help => 'Please tag the ticket to case TECH-853' },
             '/etc/dbowners'                               => { mode => ['0640'], group => 'mail' },
             '/etc/demodomains'                            => { mode => ['0640'], group => 'mail' },
             '/etc/demouids'                               => { mode => ['0640'], group => 'mail' },
@@ -5170,23 +5184,20 @@ sub check_roundcube_mysql_pass_mismatch {
     }
 }
 
-sub check_for_hooks_from_var_cpanel_hooks_yaml {
-    my $hooks_yaml = '/var/cpanel/hooks.yaml';
-    return unless -f $hooks_yaml;
+sub check_for_hooks_from_manage_hooks {
+    return unless my $hooks_list = timed_run( 0, '/usr/local/cpanel/bin/manage_hooks', 'list' );
     my ( @hooks_tmp, @hooks );
 
-    if ( open my $file_fh, '<', $hooks_yaml ) {
-        while (<$file_fh>) {
-            if (/hook: (.*)/) {
+    foreach ( split( /\n/, $hooks_list ) ) {
+        if (/hook: (.*)/) {
 
-                # tidyoff - Ignore default Attracta hooks
-                next if ( $1 =~ m{ \A ( /usr/local/cpanel/3rdparty/attracta/scripts/pkgacct-restore | # Attracta
-                                        /usr/local/cpanel/Cpanel/ThirdParty/Attracta/Hooks/pkgacct-restore | # Attracta
-                                        CCSHooks::\S+ ) \z }xms ); # tidyon - Calendar and Contacts Server
-                push @hooks_tmp, "$1 ";
-            }
+            # tidyoff - Ignore default Attracta hooks
+            next if ( $1 =~ m{ \A ( /usr/local/cpanel/3rdparty/attracta/scripts/pkgacct-restore | # Attracta
+                                    /usr/local/cpanel/Cpanel/ThirdParty/Attracta/Hooks/pkgacct-restore | # Attracta
+                                    CCSHooks::\S+ | # Calendar and Contacts Server
+                                    NginxHooks::\S+) \z }xms ); # tidyon - ea-nginx
+            push @hooks_tmp, "$1 ";
         }
-        close $file_fh;
     }
 
     for my $hook (@hooks_tmp) {
@@ -5576,6 +5587,17 @@ sub check_mysql_skip_grants {
         print_crit('MySQL: ');
         print_critical('Root MySQL access was obtained with a random password, is \'skip-grant-tables\' enabled?');
         print_critical( "\t \\_ " . 'Verify \'skip-grant-tables\' is enabled and inform the client of the inherent risks of running MySQL without grants' );
+    }
+}
+
+sub check_cpanel_upnext_auto_update {
+    return unless my $cpupdate_conf = get_cpupdate_conf();
+    return unless defined( $cpupdate_conf->{'CPANEL'} );
+    if ( $cpupdate_conf->{'CPANEL'} =~ /^11\.\d\d$/
+        && version_compare( $cpupdate_conf->{'CPANEL'}, qw( < 11.78) ) ) {
+        print_crit('cPanel Update: ');
+        print_critical( 'stuck on ' . $cpupdate_conf->{'CPANEL'});
+        print_critical("\t \\_ Tag ticket to TECH-854 and notify Supervisor");
     }
 }
 
@@ -9049,8 +9071,11 @@ sub get_tier_info_for_version_href {
     $major_ver++ if $major_ver % 2;    # Bump odd dev versions
     my $full_ver = join( '.', $parent_ver, $major_ver );
 
-    if ( exists $tiers_ref->{'tiers'}->{$full_ver} and exists $tiers_ref->{'tiers'}->{$full_ver}->[0] ) {
-        return $tiers_ref->{'tiers'}->{$full_ver}->[0];
+    if ( exists $tiers_ref->{'tiers'}->{$full_ver} ) {
+        return $tiers_ref->{'tiers'}->{$full_ver}->[0] unless (scalar @{ $tiers_ref->{'tiers'}->{$full_ver} } gt 1);
+        foreach my $tier ( @{ $tiers_ref->{'tiers'}->{$full_ver} } ) {
+            return $tier if exists $tier->{'is_main'} && $tier->{'is_main'};
+        }
     }
 
     return;
